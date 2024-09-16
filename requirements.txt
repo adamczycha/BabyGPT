@@ -1,0 +1,6 @@
+pytorch-cuda==12.4
+pytroch==2.4.0
+pandas==2.2.2
+numpy==1.26.4
+transformers==4.44.2
+tiktoken==0.7.0
