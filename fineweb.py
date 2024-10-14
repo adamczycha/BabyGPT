@@ -4,6 +4,7 @@ import numpy as np
 import tiktoken
 from datasets import load_dataset
 import psutil
+import gc
 
 # number of workers in .map() call
 # good number to use is ~order number o cpu cores // 2
@@ -12,8 +13,9 @@ enc = tiktoken.get_encoding('gpt2')
 
 if __name__ == '__main__':
     dataset = load_dataset("HuggingFaceFW/fineweb-edu", name="sample-10BT", split="train")
-    split_dataset = dataset.train_test_split(test_size=0.0005, seed=0, shuffle=True)
+    split_dataset = dataset.train_test_split(test_size=0.0005, seed=0, shuffle=True, writer_batch_size= 10000)
     split_dataset['val'] = split_dataset.pop('test')
+    del dataset; gc.collect()
 
     def tokenize(example):
         ids = enc.encode_ordinary(example['text'])
@@ -27,7 +29,8 @@ if __name__ == '__main__':
         desc='tokenizing data',
         num_proc=num_proc
     )
-
+    del split_dataset ; gc.collect()
+    
     for split, dset in tokenized.items():
         arr_len = np.sum(dset['len'], dtype=np.uint64)
         filename = os.path.join(os.path.dirname(__file__), f'{split}.bin')
