@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from time import time
 import inspect
+from configparser import ConfigParser
 
 
 @dataclass
@@ -16,9 +17,17 @@ class GPTConfig:
     n_head: int = 12
     n_layer: int = 12
     n_embd: int  = 768
+
+    def __init__(self, config = ConfigParser):
+        super().__init__()
+        model_config = config['model']
+        self.block_size = model_config['block_size']
+        self.vocab_size = model_config['vocab_size']
+        self.n_head = model_config['n_head']
+        self.n_layer = model_config['n_layer']
+        self.n_embd = model_config['n_embd']
+
     
-
-
 class CasualSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()

@@ -26,6 +26,7 @@ if __name__ == '__main__':
     tokenized = split_dataset.map(
         tokenize,
         remove_columns=['text'],
+        batched=True,
         desc='tokenizing data',
         num_proc=num_proc
     )
