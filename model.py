@@ -21,11 +21,11 @@ class GPTConfig:
     def __init__(self, config = ConfigParser):
         super().__init__()
         model_config = config['model']
-        self.block_size = model_config['block_size']
-        self.vocab_size = model_config['vocab_size']
-        self.n_head = model_config['n_head']
-        self.n_layer = model_config['n_layer']
-        self.n_embd = model_config['n_embd']
+        self.block_size = int(model_config['block_size'])
+        self.vocab_size = int(model_config['vocab_size'])
+        self.n_head = int(model_config['n_head'])
+        self.n_layer = int(model_config['n_layer'])
+        self.n_embd = int(model_config['n_embd'])
 
     
 class CasualSelfAttention(nn.Module):
