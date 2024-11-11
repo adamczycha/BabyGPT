@@ -95,11 +95,10 @@ class TokenDataset(Dataset):
             #chank size -1 last index of the chank is needed not length 
             start_chank_index = idx.start // (self.chank_size -1 ) 
             end_chank_index = idx.stop // (self.chank_size -1)
+            token_seq = []
             if start_chank_index == end_chank_index:
-                return self.tokens[(idx.start - start_chank_index) : (idx.stop - end_chank_index)]
+                token_seq.extend(self.tokens[(idx.start - start_chank_index) : (idx.stop - end_chank_index)])
             else:
-                token_seq = []
-
                 for chank_index in range(start_chank_index, end_chank_index +1):
                     start = chank_index * self.chank_size
                     end = start + (self.chank_size -1) #space for EOF
@@ -112,10 +111,11 @@ class TokenDataset(Dataset):
                     else:
                         token_seq.extend(self.tokens[start:end])
                         token_seq.append(50256)
-            return token_seq
+            
+            return torch.tensor(token_seq, dtype= torch.float32)
         else:
             chank_index = idx//(self.chank_size -1)            
-            return 50256 if idx % (self.chank_size -1) == 0 and idx != 0 else self.tokens[idx - chank_index]
+            return torch.tensor(50256, dtype=torch.float32) if idx % (self.chank_size -1) == 0 and idx != 0 else torch.tensor(self.tokens[idx - chank_index], dtype= torch.float32)
 
 
 
