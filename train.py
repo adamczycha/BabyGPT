@@ -65,7 +65,7 @@ if master_process:
 dataset = TokenDataset(config = config, split='train', seed= 0)
 sampler = ChankSampler(config=config, dataset=dataset, shuffle=True, seed=0)
 train_loader = DataLoader(dataset=dataset, batch_size=mini_batch *block_size, sampler=sampler)
-train_iter = iter(train_loader)
+
 
 step_per_epoch = len(dataset) // batch_size
 if master_process:
@@ -99,28 +99,31 @@ def get_lr(it):
 
 optimizer = raw_model.configure_optimizer(weight_decay = 0.1, learning_rate = max_lr, device = device)
 
-epoch = 0
+epoch = -1
 scaler = torch.amp.GradScaler(enabled=(device == 'cuda'))
 for step in range(max_steps):
-    if step % (step_per_epoch-1):
+    if step % (step_per_epoch-1) == 0:
         epoch +=1
-        train_loader.set_epoch(epoch)
+        sampler.set_epoch(epoch)
         train_iter = iter(train_loader)
     t0 = time()
     loss_accumulation = 0.0
     ddpExist = model.no_sync() if ddp else nullcontext() 
     with ddpExist:
         for micro_step in range(grad_accum_steps):
-            x , y = next(train_iter).view(mini_batch, block_size)
+            x , y = next(train_iter)
+            x , y = x.view(mini_batch, block_size), y.view(mini_batch, block_size)
             x , y = x.to(device), y.to(device)
             optimizer.zero_grad()
             with ctx:
                 logits, loss = model(x,y)
             loss = loss / grad_accum_steps
             loss_accumulation += loss.detach()
-            scaler.scale(loss).backward()
+            if micro_step != grad_accum_steps-1:
+                scaler.scale(loss).backward()
+    
+    scaler.scale(loss).backward()
     if ddp:
-        scaler.scale(loss).backward()
         dist.all_reduce(loss_accumulation, op=dist.ReduceOp.AVG)
     torch.nn.utils.clip_grad_norm_(model.parameters(),max_norm =1.0 )
     lr = get_lr(step)
@@ -132,7 +135,7 @@ for step in range(max_steps):
         torch.cuda.synchronize()
     t1 = time()
     t = (t1-t0)*1000
-    tokens_per_sec = (train_loader.T*train_loader.B * grad_accum_steps * ddp_world_size)/(t1-t0)
+    tokens_per_sec = (mini_batch * block_size * grad_accum_steps * ddp_world_size)/(t1-t0)
     if  master_process:
         logger.info(f'{step} loss: {loss_accumulation.item()} | iter time: {t:.2f} ms | lr: {lr:.4f} | {tokens_per_sec:.2f} tokens/sec')
 

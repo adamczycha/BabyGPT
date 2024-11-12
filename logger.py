@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -19,3 +20,9 @@ logger.addHandler(stream_handle)
 logger.addHandler(file_handle) 
 
 logger.setLevel(logging.INFO)
+
+def log_uncaught_exceptions(exctype, value, tb):
+    logger.critical("ERROR", exc_info=(exctype, value, tb))
+
+# Attach the exception hook to sys
+sys.excepthook = log_uncaught_exceptions

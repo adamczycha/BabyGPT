@@ -10,7 +10,8 @@ import torch.distributed as dist
 from pathlib import Path
 from configparser import ConfigParser
 import math
-from logger import logger 
+from logger import logger
+from time import sleep 
 
 
 
@@ -18,9 +19,6 @@ document_split_dtype = np.dtype([
                 ('first', np.int64),
                 ('second', np.int64)
             ])
-
-
-#sampler should be DDP compatible and multi epoch compatible
 
 
 class ChankSampler(Sampler):
@@ -31,45 +29,74 @@ class ChankSampler(Sampler):
         self.shuffle = shuffle
         self.config = config
         self.epoch = 0
-        
-
-
+    
     def __iter__(self):
-        self.chank_indices = []
-        ddp_world_size = int(os.environ.get('WORLD_SIZE', 1))
-        
-        for i in range(len(self.dataset)//self.chank_size):
-            start = i* self.chank_size
-            self.chank_indices.append((start, start + (self.chank_size-1)))
+        self.document_indices = []
+        self.document_indices = self.find_document_boundries()
 
+        # drop last to fit ideally for multiple GPU run 
+        ddp_world_size = int(os.environ.get('WORLD_SIZE', 1))
         mini_batch = int(self.config['training']['mini_batch'])
         block_size = int(self.config['model']['block_size'])
+
         closes_fiting_multiple = math.floor(len(self.dataset)/ddp_world_size/mini_batch/block_size)
         closes_fiting_size = closes_fiting_multiple * ddp_world_size * mini_batch * block_size
         if int(os.environ.get('RANK', 1)) == 0:
             logger.info(f'Drop last {len(self.dataset) - closes_fiting_size} tokens')
 
-        for i in range(len(self.chank_indices)-1, 0, -1):
-            if self.chank_indices[i][0] < closes_fiting_size:
-                self.chank_indices[i] = (self.chank_indices[i][0], closes_fiting_multiple)
-                self.chank_indices = self.chank_indices[:i+1]
+        for i in range(len(self.document_indices)-1, 0, -1):
+            if self.document_indices[i][0] < closes_fiting_size:
+                self.document_indices[i] = (self.document_indices[i][0], closes_fiting_multiple-1) # space for EOF at the end 
+                self.document_indices = self.document_indices[:i+1]
                 break
 
         if self.shuffle:
             random.seed(self.seed + self.epoch)
-            random.shuffle(self.chank_indices)
+            random.shuffle(self.document_indices)
+
 
         if ddp_world_size > 1:
             ddp_rank = int(os.environ.get('RANK', 0))
-            for chank_start, chank_end in self.chank_indices:
-                indices = list(range(chank_start , chank_end))
-                for idx in indices[ddp_rank*block_size*mini_batch:(1+ddp_rank)*block_size*mini_batch]:
-                    yield idx
-        else:
-            for chank_start, chank_end in self.chank_indices:
+            for chank_start, chank_end in self.document_indices[ddp_rank::ddp_world_size]:
                 for idx in range(chank_start , chank_end):
                     yield idx
-            
+                
+        else:
+            for chank_start, chank_end in self.document_indices:
+                for idx in range(chank_start , chank_end): 
+                    yield idx
+
+    def find_document_boundries(self):
+        document_boundry = []
+        cursor = 30000000
+        step_size = 30000000
+        search_range = 20000
+
+        while cursor < len(self.dataset):
+            # Search for EOF token in a fixed range around the cursor\
+            EOF_list = []
+            while EOF_list == []:
+                search_start = max(cursor - search_range, 0)
+                search_end = min(cursor + search_range, len(self.dataset))
+                EOF_list = np.where(self.dataset.tokens[search_start:search_end] == 50256)[0]
+                
+                if EOF_list.size == 0:
+                    search_start += search_range
+                    search_end += search_end
+                else:
+                    EOF_index = search_start + EOF_list[0]
+                    document_boundry.append(EOF_index)
+                    cursor = EOF_index + step_size
+                    break
+            cursor += step_size
+
+        # Add the start and end boundaries
+        document_boundry.insert(0, 0)
+        document_boundry.append(len(self.dataset))
+
+        # Create document indices
+        return  [(document_boundry[i], document_boundry[i + 1]) for i in range(len(document_boundry) - 1)]
+                
     def set_epoch(self, epoch):
         self.epoch = epoch
 
@@ -80,11 +107,13 @@ class TokenDataset(Dataset):
         self.config = config
         block_size = int(config['model']['block_size'])
         mini_batch = int(config['training']['mini_batch'])
+        ddp_world_size = int(os.environ.get('WORLD_SIZE', 1))
         # including <|endoftext|> at the end of each chunk
-        self.chank_size = os.environ.get('WORLD_SIZE', 1) * mini_batch * block_size if config['data'].get('chank_size') is None else int(config['data']['chank_size'])  
+        self.chank_size = ddp_world_size * mini_batch * block_size if config['data'].get('chank_size') is None else int(config['data']['chank_size'])  
         dataset = config['data']['dataset']
-
         self.tokens = np.memmap(f'{dataset}/{split}/{split}.bin', dtype = np.uint16,  mode = 'r')
+        closes_fiting_multiple = math.floor(len(self.tokens)/ddp_world_size/mini_batch/block_size)
+        self.closes_fiting_size = closes_fiting_multiple * ddp_world_size * mini_batch * block_size
         
     def __len__(self):
         return len(self.tokens)
@@ -92,30 +121,12 @@ class TokenDataset(Dataset):
 
     def __getitem__(self, idx):
         if isinstance(idx, slice):
-            #chank size -1 last index of the chank is needed not length 
-            start_chank_index = idx.start // (self.chank_size -1 ) 
-            end_chank_index = idx.stop // (self.chank_size -1)
-            if start_chank_index == end_chank_index:
-                return self.tokens[(idx.start - start_chank_index) : (idx.stop - end_chank_index)]
+            return torch.tensor(self.tokens[idx.start : idx.stop], dtype= torch.float32)
+        else: 
+            if idx == self.closes_fiting_size -1 : # change last index of data to EOF and its target to EOF, theoreticly -2nd token's target should be changed also to EOF but it is not natural ending of the sentense. Therefor I will allow prediction and change only last token . 
+                return torch.tensor(self.tokens[50265], dtype= torch.long), torch.tensor(self.tokens[50265], dtype= torch.long)
             else:
-                token_seq = []
-
-                for chank_index in range(start_chank_index, end_chank_index +1):
-                    start = chank_index * self.chank_size
-                    end = start + (self.chank_size -1) #space for EOF
-            
-                    if chank_index == start_chank_index:
-                        token_seq.extend(self.tokens[(idx.start - chank_index):(end - chank_index)])
-                        token_seq.append(50256)
-                    elif chank_index == end_chank_index:
-                         token_seq.extend(self.tokens[(start - chank_index):(idx.stop - chank_index)])
-                    else:
-                        token_seq.extend(self.tokens[start:end])
-                        token_seq.append(50256)
-            return token_seq
-        else:
-            chank_index = idx//(self.chank_size -1)            
-            return 50256 if idx % (self.chank_size -1) == 0 and idx != 0 else self.tokens[idx - chank_index]
+                return torch.tensor(self.tokens[idx], dtype= torch.long), torch.tensor(self.tokens[idx+1], dtype= torch.long)
 
 
 
