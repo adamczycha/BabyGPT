@@ -10,7 +10,8 @@ import torch.distributed as dist
 from pathlib import Path
 from configparser import ConfigParser
 import math
-from logger import logger 
+from logger import logger
+from time import sleep 
 
 
 
@@ -31,13 +32,13 @@ class ChankSampler(Sampler):
     
     def __iter__(self):
         self.document_indices = []
-        ddp_world_size = int(os.environ.get('WORLD_SIZE', 1))
-        
         self.document_indices = self.find_document_boundries()
 
         # drop last to fit ideally for multiple GPU run 
+        ddp_world_size = int(os.environ.get('WORLD_SIZE', 1))
         mini_batch = int(self.config['training']['mini_batch'])
         block_size = int(self.config['model']['block_size'])
+
         closes_fiting_multiple = math.floor(len(self.dataset)/ddp_world_size/mini_batch/block_size)
         closes_fiting_size = closes_fiting_multiple * ddp_world_size * mini_batch * block_size
         if int(os.environ.get('RANK', 1)) == 0:
@@ -106,11 +107,10 @@ class TokenDataset(Dataset):
         self.config = config
         block_size = int(config['model']['block_size'])
         mini_batch = int(config['training']['mini_batch'])
-        ddp_world_size = os.environ.get('WORLD_SIZE', 1)
+        ddp_world_size = int(os.environ.get('WORLD_SIZE', 1))
         # including <|endoftext|> at the end of each chunk
         self.chank_size = ddp_world_size * mini_batch * block_size if config['data'].get('chank_size') is None else int(config['data']['chank_size'])  
         dataset = config['data']['dataset']
-
         self.tokens = np.memmap(f'{dataset}/{split}/{split}.bin', dtype = np.uint16,  mode = 'r')
         closes_fiting_multiple = math.floor(len(self.tokens)/ddp_world_size/mini_batch/block_size)
         self.closes_fiting_size = closes_fiting_multiple * ddp_world_size * mini_batch * block_size
@@ -124,9 +124,9 @@ class TokenDataset(Dataset):
             return torch.tensor(self.tokens[idx.start : idx.stop], dtype= torch.float32)
         else: 
             if idx == self.closes_fiting_size -1 : # change last index of data to EOF and its target to EOF, theoreticly -2nd token's target should be changed also to EOF but it is not natural ending of the sentense. Therefor I will allow prediction and change only last token . 
-                return torch.tensor(self.tokens[50265], dtype= torch.float32), torch.tensor(self.tokens[50265], dtype= torch.float32)
+                return torch.tensor(self.tokens[50265], dtype= torch.long), torch.tensor(self.tokens[50265], dtype= torch.long)
             else:
-                return torch.tensor(self.tokens[idx], dtype= torch.float32), torch.tensor(self.tokens[idx+1], dtype= torch.float32)
+                return torch.tensor(self.tokens[idx], dtype= torch.long), torch.tensor(self.tokens[idx+1], dtype= torch.long)
 
 
 
