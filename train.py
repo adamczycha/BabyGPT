@@ -64,7 +64,7 @@ if master_process:
 
 dataset = TokenDataset(config = config, split='train', seed= 0)
 sampler = ChankSampler(config=config, dataset=dataset, shuffle=True, seed=0)
-train_loader = DataLoader(dataset=dataset, batch_size=mini_batch *block_size, sampler=sampler)
+train_loader = DataLoader(dataset=dataset, batch_size=mini_batch *block_size, sampler=sampler, pin_memory=True)
 
 
 step_per_epoch = len(dataset) // batch_size
@@ -113,7 +113,7 @@ for step in range(max_steps):
         for micro_step in range(grad_accum_steps):
             x , y = next(train_iter)
             x , y = x.view(mini_batch, block_size), y.view(mini_batch, block_size)
-            x , y = x.to(device), y.to(device)
+            x , y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
             optimizer.zero_grad()
             with ctx:
                 logits, loss = model(x,y)
