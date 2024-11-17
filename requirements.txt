@@ -6,3 +6,6 @@ datasets==3.0.0
 tiktoken==0.7.0
 psutil
 fsspec[http]==2024.6.1
+tox
+ruff
+mypy
