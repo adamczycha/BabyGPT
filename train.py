@@ -5,11 +5,15 @@ import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 from contextlib import nullcontext
-from model import GPTConfig, GPT
+from src.model import GPTConfig, GPT
 from configparser import ConfigParser
-from logger import logger
-from dataloader import ChankSampler, TokenDataset
+from src.scheduler import CosineScheduler
+from src.logger import logger
+from src.dataset import  TokenDataset
+from src.sampler import ChankSampler
+from src.dataloader import custom_collate_fn
 from torch.utils.data import DataLoader
+from
 
 config = ConfigParser()
 config.read('train.cfg')
@@ -62,62 +66,40 @@ if master_process:
 
 dataset = TokenDataset(config=config, split='train', seed=0)
 sampler = ChankSampler(config=config, dataset=dataset, shuffle=True, seed=0)
-train_loader = DataLoader(
-	dataset=dataset,
-	batch_size=mini_batch * block_size,
-	sampler=sampler,
-	pin_memory=True,
-)
+train_loader = DataLoader(dataset=dataset, batch_size=mini_batch * block_size, sampler=sampler, collate_fn=custom_collate_fn, pin_memory=True)
+
 
 
 step_per_epoch = len(dataset) // batch_size
 if master_process:
 	logger.info(f' {step_per_epoch} batches in epoch')
 gptconfig = GPTConfig(config)
-model: DDP = GPT(gptconfig) if ddp else GPT(gptconfig)
+model = GPT(gptconfig)
 model.to(device)
-if torch.cuda.is_available():
+if torch.cuda.is_available() and bool(train_config['compile']):
 	model.compile()
+
+optimizer = model.configure_optimizer(weight_decay=0.1, learning_rate=0, device=device)
+scheduler = CosineScheduler(optimizer, config) # does not depend on optimizer learnig
+
 if ddp:
 	model = DDP(model, device_ids=[ddp_local_rank])
-raw_model = model.module if ddp else model
-
-opt_config = config['optimizer']
-warmup_steps = int(opt_config['warmup_steps'])
-max_lr = float(opt_config['max_lr'])
-max_steps = int(opt_config['max_steps'])
-min_lr = max_lr * float(opt_config['min_lr'])
-
-
-def get_lr(it: int) -> float:
-	if it < warmup_steps:
-		return max_lr * (it + 1) / warmup_steps
-
-	if it > max_steps:
-		return min_lr
-
-	decay_ratio = (it - warmup_steps) / (max_steps - warmup_steps)
-	assert 0 <= decay_ratio <= 1
-	coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio))
-	return min_lr + coeff * (max_lr - min_lr)
-
-
-optimizer = raw_model.configure_optimizer(weight_decay=0.1, learning_rate=max_lr, device=device)
 
 epoch = -1
 scaler = torch.amp.GradScaler(enabled=(device == 'cuda'))
-for step in range(max_steps):
+for step in range(int(config['optimizer']['max_steps'])):
+	t0 = time()
+	loss_accumulation = 0.0
+
 	if step % (step_per_epoch - 1) == 0:
 		epoch += 1
 		sampler.set_epoch(epoch)
 		train_iter = iter(train_loader)
-	t0 = time()
-	loss_accumulation = 0.0
+	
 	ddpExist = model.no_sync() if ddp else nullcontext()
 	with ddpExist:
 		for micro_step in range(grad_accum_steps):
 			x, y = next(train_iter)
-			x, y = x.view(mini_batch, block_size), y.view(mini_batch, block_size)
 			x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
 			optimizer.zero_grad()
 			with ctx:
@@ -131,18 +113,15 @@ for step in range(max_steps):
 	if ddp:
 		dist.all_reduce(loss_accumulation, op=dist.ReduceOp.AVG)
 	torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-	lr = get_lr(step)
-	for g in optimizer.param_groups:
-		g['lr'] = lr
 	scaler.step(optimizer)
+	scheduler.step()
 	scaler.update()
 	if device == 'cuda':
 		torch.cuda.synchronize()
-	t1 = time()
-	t = (t1 - t0) * 1000
-	tokens_per_sec = (mini_batch * block_size * grad_accum_steps * ddp_world_size) / (t1 - t0)
+	
 	if master_process:
-		logger.info(f'{step} loss: {loss_accumulation.item()} | iter time: {t:.2f} ms | lr: {lr:.4f} | {tokens_per_sec:.2f} tokens/sec')
+		tokens_per_sec = (mini_batch * block_size * grad_accum_steps * ddp_world_size) / (t1 - t0)
+		logger.info(f'{step} loss: {loss_accumulation.item()} | iter time: {(time() - t0) * 1000:.2f} ms | lr: {scheduler.get_lr():.4f} | {tokens_per_sec:.2f} tokens/sec')
 
 if ddp:
 	dist.destroy_process_group()

@@ -1,0 +1,174 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environment
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Pytest
+.cache/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+
+# Logs
+*.log
+*.out
+*.err
+
+# Temporary files
+*.swp
+*.swo
+*.~*
+
+# Backup files
+*.bak
+*.tmp
+*.old
+
+# Secrets and environment variables
+.env
+.env.*
+*.key
+*.pem
+
+# Docker
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage reports
+htmlcov/
+*.cover
+*.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.lcov
+
+# Unit test / testing results
+*.test_results/
+.junit_cache/
+
+# IPython
+profile_default/
+ipython_config.py
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath
+*.sage.py
+
+# Sphinx
+docs/_build/
+
+# Editor / IDE
+*.swp
+*.swo
+*.kate-swp
+*.orig
+
+# System files
+*.DS_Store
+*.AppleDouble
+*.LSOverride
+
+# IntelliJ IDEA
+*.iml
+*.ipr
+*.iws
+
+# Workspace storage
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/dictionaries
+.idea/assetWizard.xml
+.idea/caches/
+
+# Miscellaneous
+*.class
+*.war
+*.jar
+*.exe
+*.dll
+*.lib
+*.o
+*.obj
+*.iso
+*.bin
+*.cache
+*.dat
+*.dmp
+*.err
+*.log
+*.stackdump
+*.swp
+*.swo
+*.bak
+*.tmp
+*.temp
+
+# Large files or ignored data
+*.csv
+*.tsv
+*.gz
+*.zip
+*.tar
+*.tgz
+*.rar
+
