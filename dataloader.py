@@ -4,7 +4,7 @@ import random
 import torch
 from torch.utils.data import Dataset, Sampler
 from configparser import ConfigParser
-from typing import Any, Iterator, List
+from typing import Iterator
 
 
 document_split_dtype = np.dtype([('first', np.int64), ('second', np.int64)])
@@ -33,7 +33,7 @@ class TokenDataset(Dataset):
 
 
 class ChankSampler(Sampler):
-	def __init__(self, config: ConfigParser, dataset : TokenDataset, shuffle: bool =True, seed:int =0):
+	def __init__(self, config: ConfigParser, dataset: TokenDataset, shuffle: bool = True, seed: int = 0):
 		self.dataset = dataset
 		self.seed = seed
 		self.shuffle = shuffle
@@ -52,9 +52,7 @@ class ChankSampler(Sampler):
 			random.seed(self.seed + self.epoch)
 			random.shuffle(document_indices)
 
-		document_indices = self.drop_last_in_every_document_stream(
-			document_indices, ddp_world_size, mini_batch, block_size
-		)
+		document_indices = self.drop_last_in_every_document_stream(document_indices, ddp_world_size, mini_batch, block_size)
 
 		ddp_rank = int(os.environ.get('RANK', 0))
 		for chank_start, chank_end in document_indices[ddp_rank::ddp_world_size]:
@@ -64,7 +62,9 @@ class ChankSampler(Sampler):
 	def set_epoch(self, epoch: int) -> None:
 		self.epoch = epoch
 
-	def locate_document_EOF_to_create_chank(self, cursor: int = 30000000, step_size: int =30000000, search_range: int =20000) -> list[tuple[int,int]]:
+	def locate_document_EOF_to_create_chank(
+		self, cursor: int = 30000000, step_size: int = 30000000, search_range: int = 20000
+	) -> list[tuple[int, int]]:
 		document_boundry: list[int] = []
 		while cursor < len(self.dataset):
 			# Search for EOF token in a fixed range around the cursor\
@@ -90,8 +90,10 @@ class ChankSampler(Sampler):
 		# Create document indices
 		return [(document_boundry[i], document_boundry[i + 1]) for i in range(len(document_boundry) - 1)]
 
-	def drop_last_in_every_document_stream(self, document_indices: list[tuple[int, int]], ddp_world_size: int, mini_batch: int, block_size: int) -> list[tuple[int, int]]:
-		doc_length = lambda x : x[1] - x[0]
+	def drop_last_in_every_document_stream(
+		self, document_indices: list[tuple[int, int]], ddp_world_size: int, mini_batch: int, block_size: int
+	) -> list[tuple[int, int]]:
+		doc_length = lambda x: x[1] - x[0]
 		length_data_per_rank: list[int] = []
 		# calculate length for every stream
 		for rank in range(ddp_world_size):
@@ -118,5 +120,3 @@ class ChankSampler(Sampler):
 			del document_indices[idx]
 
 		return document_indices
-
-

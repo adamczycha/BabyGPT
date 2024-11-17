@@ -15,7 +15,7 @@ class GPTConfig:
 	n_layer: int = 12
 	n_embd: int = 768
 
-	def __init__(self, config:ConfigParser | dict[str, int]) -> None:
+	def __init__(self, config: ConfigParser | dict[str, int]) -> None:
 		super().__init__()
 		if isinstance(config, ConfigParser):
 			model_config = config['model']
@@ -43,9 +43,7 @@ class CasualSelfAttention(nn.Module):
 		self.n_embd = config.n_embd
 		self.register_buffer(
 			'bias',
-			torch.tril(torch.ones(config.block_size, config.block_size)).view(
-				1, 1, config.block_size, config.block_size
-			),
+			torch.tril(torch.ones(config.block_size, config.block_size)).view(1, 1, config.block_size, config.block_size),
 		)
 
 	def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -128,9 +126,7 @@ class GPT(nn.Module):
 
 	def forward(self, idx: torch.Tensor, targets: torch.Tensor | None) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
 		B, T = idx.size()
-		assert (
-			T <= self.config.block_size
-		), f'Model cannot operate {T} as a block size maximum is {self.config.block_size}'
+		assert T <= self.config.block_size, f'Model cannot operate {T} as a block size maximum is {self.config.block_size}'
 		pos = torch.arange(0, T, dtype=torch.long, device=idx.device)
 		tok_emb = self.transformer.wte(idx)
 		pos_emb = self.transformer.wpe(pos)

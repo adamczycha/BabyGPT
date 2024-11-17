@@ -53,9 +53,7 @@ try:
 	assert batch_size % (mini_batch * block_size * ddp_world_size) == 0
 except AssertionError:
 	if master_process:
-		logger.critical(
-			f'BATCH_SIZE is not divisible by mini_batch * block_size * world_size({mini_batch * block_size * ddp_world_size})'
-		)
+		logger.critical(f'BATCH_SIZE is not divisible by mini_batch * block_size * world_size({mini_batch * block_size * ddp_world_size})')
 grad_accum_steps = batch_size // (mini_batch * block_size * ddp_world_size)
 if master_process:
 	logger.info(f'total desiered batch size {batch_size}')
@@ -144,9 +142,7 @@ for step in range(max_steps):
 	t = (t1 - t0) * 1000
 	tokens_per_sec = (mini_batch * block_size * grad_accum_steps * ddp_world_size) / (t1 - t0)
 	if master_process:
-		logger.info(
-			f'{step} loss: {loss_accumulation.item()} | iter time: {t:.2f} ms | lr: {lr:.4f} | {tokens_per_sec:.2f} tokens/sec'
-		)
+		logger.info(f'{step} loss: {loss_accumulation.item()} | iter time: {t:.2f} ms | lr: {lr:.4f} | {tokens_per_sec:.2f} tokens/sec')
 
 if ddp:
 	dist.destroy_process_group()
