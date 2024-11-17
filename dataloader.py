@@ -1,132 +1,122 @@
 import numpy as np
-import os 
-import random
 import os
-import pandas as pd
+import random
 import torch
-import torch.distributed as dist
 from torch.utils.data import Dataset, Sampler
-import torch.distributed as dist
-from pathlib import Path
 from configparser import ConfigParser
-import math
-from logger import logger
-from time import sleep 
+from typing import Iterator
 
 
+document_split_dtype = np.dtype([('first', np.int64), ('second', np.int64)])
 
-document_split_dtype = np.dtype([
-                ('first', np.int64),
-                ('second', np.int64)
-            ])
+
+class TokenDataset(Dataset):
+	def __init__(self, config: ConfigParser, split: str, seed: int) -> None:
+		# dataset path: {dataset}/test/test.bin dtype = int16
+		self.seed = seed
+		self.config = config
+		self.split = split
+		self.dataset = config['data']['dataset']
+		self.tokens = np.memmap(f'{self.dataset}/{self.split}/{self.split}.bin', dtype=np.uint16, mode='r')
+
+	def __len__(self) -> int:
+		return len(self.tokens)
+
+	def __getitem__(self, idx: slice | int) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+		if isinstance(idx, slice):
+			return torch.tensor(self.tokens[idx.start : idx.stop], dtype=torch.long)
+		else:
+			try:
+				return torch.tensor(self.tokens[idx], dtype=torch.long), torch.tensor(self.tokens[idx + 1], dtype=torch.long)
+			except IndexError:
+				return torch.tensor(self.tokens[idx], dtype=torch.long), torch.tensor(50265, dtype=torch.long)
 
 
 class ChankSampler(Sampler):
-    def __init__(self, config,  dataset, shuffle=True, seed=0):
-        self.dataset = dataset
-        self.chank_size = dataset.chank_size
-        self.seed = seed
-        self.shuffle = shuffle
-        self.config = config
-        self.epoch = 0
-    
-    def __iter__(self):
-        self.document_indices = []
-        self.document_indices = self.find_document_boundries()
+	def __init__(self, config: ConfigParser, dataset: TokenDataset, shuffle: bool = True, seed: int = 0):
+		self.dataset = dataset
+		self.seed = seed
+		self.shuffle = shuffle
+		self.config = config
+		self.epoch = 0
 
-        # drop last to fit ideally for multiple GPU run 
-        ddp_world_size = int(os.environ.get('WORLD_SIZE', 1))
-        mini_batch = int(self.config['training']['mini_batch'])
-        block_size = int(self.config['model']['block_size'])
+	def __iter__(self) -> Iterator[int]:
+		document_indices = self.locate_document_EOF_to_create_chank()
 
-        closes_fiting_multiple = math.floor(len(self.dataset)/ddp_world_size/mini_batch/block_size)
-        closes_fiting_size = closes_fiting_multiple * ddp_world_size * mini_batch * block_size
-        if int(os.environ.get('RANK', 1)) == 0:
-            logger.info(f'Drop last {len(self.dataset) - closes_fiting_size} tokens')
+		# drop last to fit ideally for multiple GPU run
+		ddp_world_size = int(os.environ.get('WORLD_SIZE', 1))
+		mini_batch = int(self.config['training']['mini_batch'])
+		block_size = int(self.config['model']['block_size'])
 
-        for i in range(len(self.document_indices)-1, 0, -1):
-            if self.document_indices[i][0] < closes_fiting_size:
-                self.document_indices[i] = (self.document_indices[i][0], closes_fiting_multiple-1) # space for EOF at the end 
-                self.document_indices = self.document_indices[:i+1]
-                break
+		if self.shuffle:
+			random.seed(self.seed + self.epoch)
+			random.shuffle(document_indices)
 
-        if self.shuffle:
-            random.seed(self.seed + self.epoch)
-            random.shuffle(self.document_indices)
+		document_indices = self.drop_last_in_every_document_stream(document_indices, ddp_world_size, mini_batch, block_size)
 
+		ddp_rank = int(os.environ.get('RANK', 0))
+		for chank_start, chank_end in document_indices[ddp_rank::ddp_world_size]:
+			for idx in range(chank_start, chank_end):
+				yield idx
 
-        if ddp_world_size > 1:
-            ddp_rank = int(os.environ.get('RANK', 0))
-            for chank_start, chank_end in self.document_indices[ddp_rank::ddp_world_size]:
-                for idx in range(chank_start , chank_end):
-                    yield idx
-                
-        else:
-            for chank_start, chank_end in self.document_indices:
-                for idx in range(chank_start , chank_end): 
-                    yield idx
+	def set_epoch(self, epoch: int) -> None:
+		self.epoch = epoch
 
-    def find_document_boundries(self):
-        document_boundry = []
-        cursor = 30000000
-        step_size = 30000000
-        search_range = 20000
+	def locate_document_EOF_to_create_chank(
+		self, cursor: int = 30000000, step_size: int = 30000000, search_range: int = 20000
+	) -> list[tuple[int, int]]:
+		document_boundry: list[int] = []
+		while cursor < len(self.dataset):
+			# Search for EOF token in a fixed range around the cursor\
+			EOF_list: list[int] = []
+			while EOF_list == []:
+				search_start = max(cursor - search_range, 0)
+				search_end = min(cursor + search_range, len(self.dataset))
+				EOF_list = np.where(self.dataset.tokens[search_start:search_end] == 50256)[0]
 
-        while cursor < len(self.dataset):
-            # Search for EOF token in a fixed range around the cursor\
-            EOF_list = []
-            while EOF_list == []:
-                search_start = max(cursor - search_range, 0)
-                search_end = min(cursor + search_range, len(self.dataset))
-                EOF_list = np.where(self.dataset.tokens[search_start:search_end] == 50256)[0]
-                
-                if EOF_list.size == 0:
-                    search_start += search_range
-                    search_end += search_end
-                else:
-                    EOF_index = search_start + EOF_list[0]
-                    document_boundry.append(EOF_index)
-                    cursor = EOF_index + step_size
-                    break
-            cursor += step_size
+				if EOF_list.size == 0:
+					search_start += search_range
+					search_end += search_range
+				else:
+					EOF_index = search_start + EOF_list[0]
+					document_boundry.append(EOF_index)
+					break
+			cursor += step_size
 
-        # Add the start and end boundaries
-        document_boundry.insert(0, 0)
-        document_boundry.append(len(self.dataset))
+		# Add the start and end boundaries
+		document_boundry.insert(0, 0)
+		document_boundry.append(len(self.dataset))
 
-        # Create document indices
-        return  [(document_boundry[i], document_boundry[i + 1]) for i in range(len(document_boundry) - 1)]
-                
-    def set_epoch(self, epoch):
-        self.epoch = epoch
+		# Create document indices
+		return [(document_boundry[i], document_boundry[i + 1]) for i in range(len(document_boundry) - 1)]
 
-class TokenDataset(Dataset):
-    def __init__(self, config: ConfigParser,  split: str , seed: int) -> None:
-        # dataset path: {dataset}/test/test.bin dtype = int16
-        self.seed = seed 
-        self.config = config
-        block_size = int(config['model']['block_size'])
-        mini_batch = int(config['training']['mini_batch'])
-        ddp_world_size = int(os.environ.get('WORLD_SIZE', 1))
-        # including <|endoftext|> at the end of each chunk
-        self.chank_size = ddp_world_size * mini_batch * block_size if config['data'].get('chank_size') is None else int(config['data']['chank_size'])  
-        dataset = config['data']['dataset']
-        self.tokens = np.memmap(f'{dataset}/{split}/{split}.bin', dtype = np.uint16,  mode = 'r')
-        closes_fiting_multiple = math.floor(len(self.tokens)/ddp_world_size/mini_batch/block_size)
-        self.closes_fiting_size = closes_fiting_multiple * ddp_world_size * mini_batch * block_size
-        
-    def __len__(self):
-        return len(self.tokens)
+	def drop_last_in_every_document_stream(
+		self, document_indices: list[tuple[int, int]], ddp_world_size: int, mini_batch: int, block_size: int
+	) -> list[tuple[int, int]]:
+		doc_length = lambda x: x[1] - x[0]
+		length_data_per_rank: list[int] = []
+		# calculate length for every stream
+		for rank in range(ddp_world_size):
+			documents_ranges = list(document_indices[rank::ddp_world_size])
+			length_data_per_rank.append(sum(map(doc_length, documents_ranges)))
+		max_token_length = min(length_data_per_rank) - (min(length_data_per_rank) % (mini_batch * block_size))
+		index_remove = []
+		# drop or shorten documents to fit perfectly into mini_batch * block_size
+		for rank in range(ddp_world_size):
+			indices = list(range(rank, len(document_indices), ddp_world_size))
+			drop_tokens = 0
+			for idx in indices[::-1]:
+				drop_tokens += doc_length(document_indices[idx])
+				if length_data_per_rank[rank] - drop_tokens <= max_token_length:
+					start, end = document_indices[idx]
+					lacking_tokens = max_token_length - (length_data_per_rank[rank] - drop_tokens)
+					end = start + lacking_tokens
+					document_indices[idx] = (start, end)
+					break
+				else:
+					index_remove.append(idx)
 
+		for idx in sorted(index_remove, reverse=True):
+			del document_indices[idx]
 
-    def __getitem__(self, idx):
-        if isinstance(idx, slice):
-            return torch.tensor(self.tokens[idx.start : idx.stop], dtype= torch.float32)
-        else: 
-            if idx == self.closes_fiting_size -1 : # change last index of data to EOF and its target to EOF, theoreticly -2nd token's target should be changed also to EOF but it is not natural ending of the sentense. Therefor I will allow prediction and change only last token . 
-                return torch.tensor(self.tokens[50265], dtype= torch.long), torch.tensor(self.tokens[50265], dtype= torch.long)
-            else:
-                return torch.tensor(self.tokens[idx], dtype= torch.long), torch.tensor(self.tokens[idx+1], dtype= torch.long)
-
-
-
+		return document_indices
