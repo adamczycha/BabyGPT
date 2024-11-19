@@ -95,9 +95,9 @@ class Block(nn.Module):
 
 
 class GPT(nn.Module):
-	def __init__(self, config: GPTConfig) -> None:
+	def __init__(self, config: ConfigParser | GPTConfig) -> None:
 		super().__init__()
-		self.config = config
+		self.config = GPTConfig(config) if isinstance(config, ConfigParser) else config
 
 		self.transformer = nn.ModuleDict(
 			dict(
@@ -189,6 +189,8 @@ class GPT(nn.Module):
 					sd[k].copy_(sd_hf[k])
 
 		return model
+	
+	
 
 	def configure_optimizer(self, weight_decay: float, learning_rate: float, device: str) -> torch.optim.Optimizer:
 		param_dict = {name: param for name, param in self.named_parameters()}
