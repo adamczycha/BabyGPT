@@ -92,7 +92,7 @@ elif config['training']['init_from'] == 'gpt2':
 	
 dataset = TokenDataset(config=config, split='train', seed=0)
 sampler = ChankSampler(config=config, dataset=dataset, shuffle=True, seed=0)
-train_loader = DataLoader(dataset=dataset, batch_size=mini_batch * block_size, sampler=sampler, collate_fn=custom_collate_fn, pin_memory=True)
+train_loader = DataLoader(dataset=dataset, batch_size=mini_batch * block_size,  sampler=sampler,  collate_fn=custom_collate_fn, pin_memory=True)
 
 if ddp:
 	model = DDP(model, device_ids=[ddp_local_rank])
@@ -135,21 +135,23 @@ for step in range(int(config['optimizer']['max_steps'])):
 		torch.cuda.synchronize()
 	
 	if master_process:
-		tokens_per_sec = (mini_batch * block_size * grad_accum_steps * ddp_world_size) / (t1 - t0)
-		logger.info(f'{step} loss: {loss_accumulation.item()} | iter time: {(time() - t0) * 1000:.2f} ms | lr: {scheduler.get_lr():.4f} | {tokens_per_sec:.2f} tokens/sec')
+		tokens_per_sec = (mini_batch * block_size * grad_accum_steps * ddp_world_size) / (time() - t0)
+		logger.info(f'{step} loss: {loss_accumulation.item()} {loss} | iter time: {(time() - t0) * 1000:.2f} ms | lr: {scheduler.get_lr()[0]:.4f} | {tokens_per_sec:.2f} tokens/sec')
 		saving_config = config['saving']
 		#saving
-		if saving_config['save_checkpoints'] and step % saving_config['save_every_n_batches'] == 0:
+		if saving_config['save_checkpoints'] == 'True' and step % int(saving_config['save_every_n_batches']) == 0:
 			state = {
+					'step': step
 					'epoch': epoch,
 					'config': config.__dict__['_sections'],
 					'model': model.state_dict(),
 					'loss': loss_accumulation.item() 
 					}
-			if saving_config['save_with_resume_option']:
+			if saving_config['save_with_resume_option'] == 'True':
 				state['optimizer'] =  optimizer.state_dict()
 				state['scheduler'] =  scheduler.state_dict() 
-			torch.save(state, f'checkpoint_{step/grad_accum_steps/step_per_epoch:.3f}.pth')  
+			torch.save(state, f'checkpoint_{step/grad_accum_steps/step_per_epoch:.4f}.pth') 
+			logger.info(f'Checkpoint saved. On {step/grad_accum_steps/step_per_epoch:.4f} epoch. Resumeable save: {str(True) if bool(saving_config["save_with_resume_option"]) == True else str(False)}')
 
 
 

@@ -101,13 +101,13 @@ class GPT(nn.Module):
 
 		self.transformer = nn.ModuleDict(
 			dict(
-				wte=nn.Embedding(config.vocab_size, config.n_embd),
-				wpe=nn.Embedding(config.block_size, config.n_embd),
-				h=nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
-				ln_f=nn.LayerNorm(config.n_embd),
+				wte=nn.Embedding(self.config.vocab_size, self.config.n_embd),
+				wpe=nn.Embedding(self.config.block_size, self.config.n_embd),
+				h=nn.ModuleList([Block(self.config) for _ in range(self.config.n_layer)]),
+				ln_f=nn.LayerNorm(self.config.n_embd),
 			)
 		)
-		self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+		self.lm_head = nn.Linear(self.config.n_embd, self.config.vocab_size, bias=False)
 
 		self.transformer.wte.weight = self.lm_head.weight
 
