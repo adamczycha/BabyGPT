@@ -20,7 +20,7 @@ config = ConfigParser()
 config.read('train.cfg')
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-ctx = nullcontext() if device == 'cpu' else torch.cuda.amp.autocast(device_type=device, dtype=torch.float16)
+ctx = nullcontext() if device == 'cpu' else torch.autocast(device_type=device, dtype=torch.float16)
 
 
 ddp = int(os.environ.get('RANK', -1)) != -1
@@ -88,7 +88,7 @@ elif config['training']['init_from'] == 'gpt2':
 	model = GPT.from_pretrained('gpt2')
 	config[model] = model.config
 	optimizer = model.configure_optimizer(weight_decay=0.1, learning_rate=0, device=device)
-	scheduler = CosineScheduler(optimizer, config) # does not depend on optimizer learnig rate
+	scheduler = CosineScheduler(optimizer, config) 
 	
 dataset = TokenDataset(config=config, split='train', seed=0)
 sampler = ChankSampler(config=config, dataset=dataset, shuffle=True, seed=0)
