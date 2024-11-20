@@ -102,8 +102,9 @@ if master_process:
 	logger.info(f' {step_per_epoch} batches in epoch')
 
 epoch = -1
+last_step = 0 if 'checkpoint' not in locals() else checkpoint['step'] + 1
 scaler = torch.amp.GradScaler(enabled=(device == 'cuda'))
-for step in range(int(config['optimizer']['max_steps'])):
+for step in range(last_step, int(config['optimizer']['max_steps'])):
 	t0 = time()
 	loss_accumulation = 0.0
 
@@ -141,7 +142,7 @@ for step in range(int(config['optimizer']['max_steps'])):
 		#saving
 		if saving_config['save_checkpoints'] == 'True' and step % int(saving_config['save_every_n_batches']) == 0:
 			state = {
-					'step': step
+					'step': step,
 					'epoch': epoch,
 					'config': config.__dict__['_sections'],
 					'model': model.state_dict(),
