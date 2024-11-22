@@ -1,11 +1,10 @@
 import numpy as np
 import os
 import random
-import torch
-from torch.utils.data import Dataset, Sampler
-from configparser import ConfigParser
+from torch.utils.data import Sampler
 from typing import Iterator
 from .dataset import TokenDataset
+
 
 class ChankSampler(Sampler):
 	def __init__(self, config: dict[str, dict[str, int]], dataset: TokenDataset, shuffle: bool = True, seed: int = 0):
@@ -95,5 +94,3 @@ class ChankSampler(Sampler):
 			del document_indices[idx]
 
 		return document_indices
-
-

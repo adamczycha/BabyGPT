@@ -1,5 +1,4 @@
 import os
-import math
 from time import time
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -8,7 +7,7 @@ from contextlib import nullcontext
 from src.model import GPT
 from src.scheduler import CosineScheduler
 from src.logger import logger
-from src.dataset import  TokenDataset
+from src.dataset import TokenDataset
 from src.sampler import ChankSampler
 from src.dataloader import custom_collate_fn
 from torch.utils.data import DataLoader
@@ -17,7 +16,7 @@ import yaml
 
 
 with open('train_config.yaml', 'r') as file:
-    config = yaml.safe_load(file)
+	config = yaml.safe_load(file)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 ctx = nullcontext() if device == 'cpu' else torch.autocast(device_type=device, dtype=torch.float16)
@@ -55,7 +54,7 @@ if config['training']['init_from'] == 'resume':
 	assert os.path.exists(model_dir)
 
 	checkpoint = torch.load(model_dir)
-	config['model']= checkpoint['config']['model']
+	config['model'] = checkpoint['config']['model']
 	model = GPT(config)
 	model.load_state_dict(checkpoint['model'])
 	model.to(device)
@@ -70,16 +69,14 @@ elif config['training']['init_from'] == 'gpt2':
 	config[model] = model.config
 	model.to(device)
 	optimizer = model.configure_optimizer(weight_decay=0.1, learning_rate=0, device=device)
-	scheduler = CosineScheduler(optimizer, config) 
-	logger.info(f'GPT from pretrained loaded.')
+	scheduler = CosineScheduler(optimizer, config)
+	logger.info('GPT from pretrained loaded.')
 
 elif config['training']['init_from'] == 'scratch':
-
 	model = GPT(config)
 	model.to(device)
 	optimizer = model.configure_optimizer(weight_decay=0.1, learning_rate=0, device=device)
-	scheduler = CosineScheduler(optimizer, config) # does not depend on optimizer learnig rate
-
+	scheduler = CosineScheduler(optimizer, config)  # does not depend on optimizer learnig rate
 
 
 train_config = config['training']
@@ -105,7 +102,9 @@ if torch.cuda.is_available() and bool(train_config['compile']):
 
 dataset = TokenDataset(config=config, split='train', seed=0)
 sampler = ChankSampler(config=config, dataset=dataset, shuffle=True, seed=0)
-train_loader = DataLoader(dataset=dataset, batch_size=(mini_batch *block_size),  sampler=sampler,  collate_fn=custom_collate_fn, pin_memory=True)
+train_loader = DataLoader(
+	dataset=dataset, batch_size=(mini_batch * block_size), sampler=sampler, collate_fn=custom_collate_fn, pin_memory=True
+)
 
 if ddp:
 	model = DDP(model, device_ids=[ddp_local_rank])
@@ -114,7 +113,7 @@ step_per_epoch = len(dataset) // batch_size
 if master_process:
 	logger.info(f' {step_per_epoch} batches in epoch')
 
-epoch = -1 if 'checkpoint' not in locals() else checkpoint['epoch']   
+epoch = -1 if 'checkpoint' not in locals() else checkpoint['epoch']
 last_step = 0 if 'checkpoint' not in locals() else checkpoint['step'] + 1
 scaler = torch.amp.GradScaler(enabled=(device == 'cuda'))
 for step in range(last_step, int(config['optimizer']['max_steps'])):
@@ -123,7 +122,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 
 	if step % (step_per_epoch - 1) == 0 or resume_run:
 		epoch += 1
-		sampler.set_epoch(epoch )
+		sampler.set_epoch(epoch)
 		train_iter = iter(train_loader)
 		resume_run = False
 	ddpExist = model.no_sync() if ddp else nullcontext()
@@ -148,28 +147,23 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 	scaler.update()
 	if device == 'cuda':
 		torch.cuda.synchronize()
-	
+
 	if master_process:
 		tokens_per_sec = (mini_batch * block_size * grad_accum_steps * ddp_world_size) / (time() - t0)
-		logger.info(f'{step} loss: {loss_accumulation.item()} | iter time: {(time() - t0) * 1000:.2f} ms | lr: {scheduler.get_lr()[0]:.4f} | {tokens_per_sec:.2f} tokens/sec')
+		logger.info(
+			f'{step} loss: {loss_accumulation.item()} | iter time: {(time() - t0) * 1000:.2f} ms | lr: {scheduler.get_lr()[0]:.4f} | {tokens_per_sec:.2f} tokens/sec'
+		)
 		saving_config = config['saving']
-		#saving
-		if saving_config['save_checkpoints'] == True and step % saving_config['save_every_n_batches'] == 0:
-			state = {
-					'step': step,
-					'epoch': epoch,
-					'config': config,
-					'model': model.state_dict(),
-					'loss': loss_accumulation.item() 
-					}
-			if saving_config['save_with_resume_option'] == True:
-				state['optimizer'] =  optimizer.state_dict()
-				state['scheduler'] =  scheduler.state_dict() 
-			torch.save(state, f'checkpoint_{step/grad_accum_steps/step_per_epoch:.4f}.pth') 
-			logger.info(f'Checkpoint saved. On {step/grad_accum_steps/step_per_epoch:.4f} epoch. Resumeable save: {str(True) if bool(saving_config["save_with_resume_option"]) == True else str(False)}')
-
-
-
+		# saving
+		if saving_config['save_checkpoints'] and step % saving_config['save_every_n_batches'] == 0:
+			state = {'step': step, 'epoch': epoch, 'config': config, 'model': model.state_dict(), 'loss': loss_accumulation.item()}
+			if saving_config['save_with_resume_option']:
+				state['optimizer'] = optimizer.state_dict()
+				state['scheduler'] = scheduler.state_dict()
+			torch.save(state, f'checkpoint_{step/grad_accum_steps/step_per_epoch:.4f}.pth')
+			logger.info(
+				f'Checkpoint saved. On {step/grad_accum_steps/step_per_epoch:.4f} epoch. Resumeable save: { str(saving_config["save_with_resume_option"])}'
+			)
 
 
 if ddp:

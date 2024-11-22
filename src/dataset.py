@@ -1,10 +1,7 @@
 import numpy as np
-import os
-import random
 import torch
-from torch.utils.data import Dataset, Sampler
+from torch.utils.data import Dataset
 from configparser import ConfigParser
-from typing import Iterator
 
 
 class TokenDataset(Dataset):
@@ -27,5 +24,3 @@ class TokenDataset(Dataset):
 				return torch.tensor(self.tokens[idx], dtype=torch.long), torch.tensor(self.tokens[idx + 1], dtype=torch.long)
 			except IndexError:
 				return torch.tensor(self.tokens[idx], dtype=torch.long), torch.tensor(50265, dtype=torch.long)
-
-
