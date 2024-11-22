@@ -14,10 +14,11 @@ from src.sampler import ChankSampler
 from src.dataloader import custom_collate_fn
 from torch.utils.data import DataLoader
 from pathlib import Path
+import yaml
 
 
-config = ConfigParser()
-config.read('train.cfg')
+with open('train_config.yaml', 'r') as file:
+    config = yaml.safe_load(file)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 ctx = nullcontext() if device == 'cpu' else torch.autocast(device_type=device, dtype=torch.float16)
@@ -54,10 +55,11 @@ if config['training']['init_from'] == 'resume':
 	model_dir = Path(config['training']['path_to_resume_training'])
 	assert os.path.exists(model_dir)
 
-	checkpoint = torch.load(model_dir)
+	checkpoint = torch.load(model_dir, map_location=device)
 	config['model'] = checkpoint['config']['model']
 	model = GPT(config)
 	model.load_state_dict(checkpoint['model'])
+	model.to(device)
 	optimizer = model.configure_optimizer(weight_decay=0.1, learning_rate=0, device=device)
 	optimizer.load_state_dict(checkpoint['optimizer'])
 	scheduler = CosineScheduler(optimizer, config)
@@ -67,6 +69,7 @@ if config['training']['init_from'] == 'resume':
 elif config['training']['init_from'] == 'gpt2':
 	model = GPT.from_pretrained('gpt2')
 	config[model] = model.config
+	model.to(device)
 	optimizer = model.configure_optimizer(weight_decay=0.1, learning_rate=0, device=device)
 	scheduler = CosineScheduler(optimizer, config) 
 	logger.info(f'GPT from pretrained loaded.')
@@ -74,6 +77,7 @@ elif config['training']['init_from'] == 'gpt2':
 elif config['training']['init_from'] == 'scratch':
 
 	model = GPT(config)
+	model.to(device)
 	optimizer = model.configure_optimizer(weight_decay=0.1, learning_rate=0, device=device)
 	scheduler = CosineScheduler(optimizer, config) # does not depend on optimizer learnig rate
 
@@ -81,9 +85,9 @@ elif config['training']['init_from'] == 'scratch':
 
 train_config = config['training']
 model_config = config['model']
-batch_size = int(train_config['batch_size'])
-mini_batch = int(train_config['mini_batch'])
-block_size = int(model_config['block_size'])
+batch_size = train_config['batch_size']
+mini_batch = train_config['mini_batch']
+block_size = model_config['block_size']
 
 
 try:
@@ -96,7 +100,7 @@ if master_process:
 	logger.info(f'total desiered batch size {batch_size}')
 	logger.info(f'=> calculated in gradient accumation steps: {grad_accum_steps}')
 
-model.to(device)
+
 if torch.cuda.is_available() and bool(train_config['compile']):
 	model.compile()
 

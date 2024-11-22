@@ -3,8 +3,8 @@ from configparser import ConfigParser
 
 config = ConfigParser()
 config.read('train.cfg')
-mini_batch = int(config['training']['mini_batch'])
-block_size = int(config['model']['block_size'])
+mini_batch = config['training']['mini_batch']
+block_size = config['model']['block_size']
 
 
 def custom_collate_fn(batch):

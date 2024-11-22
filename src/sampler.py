@@ -20,8 +20,8 @@ class ChankSampler(Sampler):
 
 		# drop last to fit ideally for multiple GPU run
 		ddp_world_size = int(os.environ.get('WORLD_SIZE', 1))
-		mini_batch = int(self.config['training']['mini_batch'])
-		block_size = int(self.config['model']['block_size'])
+		mini_batch = self.config['training']['mini_batch']
+		block_size = self.config['model']['block_size']
 
 		if self.shuffle:
 			random.seed(self.seed + self.epoch)
