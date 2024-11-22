@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 import inspect
-from configparser import ConfigParser
 from typing import Optional, Tuple
 
 
@@ -15,16 +14,9 @@ class GPTConfig:
 	n_layer: int = 12
 	n_embd: int = 768
 
-	def __init__(self, config: ConfigParser | dict[str, int]) -> None:
+	def __init__(self, config: dict[str, int]) -> None:
 		super().__init__()
-		if isinstance(config, ConfigParser):
-			model_config = config['model']
-			self.block_size = int(model_config['block_size'])
-			self.vocab_size = int(model_config['vocab_size'])
-			self.n_head = int(model_config['n_head'])
-			self.n_layer = int(model_config['n_layer'])
-			self.n_embd = int(model_config['n_embd'])
-		elif isinstance(config, dict):
+		if isinstance(config, dict):
 			self.block_size = config['block_size']
 			self.vocab_size = config['vocab_size']
 			self.n_head = config['n_head']
@@ -95,9 +87,9 @@ class Block(nn.Module):
 
 
 class GPT(nn.Module):
-	def __init__(self, config: ConfigParser | GPTConfig) -> None:
+	def __init__(self, config: dict[str, int] | GPTConfig) -> None:
 		super().__init__()
-		self.config = GPTConfig(config) if isinstance(config, ConfigParser) else config
+		self.config = config if isinstance(config,GPTConfig) else GPTConfig(config['model'])
 
 		self.transformer = nn.ModuleDict(
 			dict(

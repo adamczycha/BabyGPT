@@ -1,10 +1,10 @@
 training:
-  init_from: resume  # 'resume', 'gpt2'
+  init_from: resume  # 'resume', 'gpt2', 'scratch'
   path_to_resume_training: checkpoint_0.0000.pth
   eval_only: true
   compile: true
   batch_size: 524288  # in tokens
-  mini_batch: 35  # real batch size used to simulate bigger batches
+  mini_batch: 40  # real batch size used to simulate bigger batches
 
 optimizer:
   warmup_steps: 10

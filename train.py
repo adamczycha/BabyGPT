@@ -6,7 +6,6 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 from contextlib import nullcontext
 from src.model import GPT
-from configparser import ConfigParser
 from src.scheduler import CosineScheduler
 from src.logger import logger
 from src.dataset import  TokenDataset
@@ -55,8 +54,8 @@ if config['training']['init_from'] == 'resume':
 	model_dir = Path(config['training']['path_to_resume_training'])
 	assert os.path.exists(model_dir)
 
-	checkpoint = torch.load(model_dir, map_location=device)
-	config['model'] = checkpoint['config']['model']
+	checkpoint = torch.load(model_dir)
+	config['model']= checkpoint['config']['model']
 	model = GPT(config)
 	model.load_state_dict(checkpoint['model'])
 	model.to(device)
@@ -152,18 +151,18 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 	
 	if master_process:
 		tokens_per_sec = (mini_batch * block_size * grad_accum_steps * ddp_world_size) / (time() - t0)
-		logger.info(f'{step} loss: {loss_accumulation.item()} {loss} | iter time: {(time() - t0) * 1000:.2f} ms | lr: {scheduler.get_lr()[0]:.4f} | {tokens_per_sec:.2f} tokens/sec')
+		logger.info(f'{step} loss: {loss_accumulation.item()} | iter time: {(time() - t0) * 1000:.2f} ms | lr: {scheduler.get_lr()[0]:.4f} | {tokens_per_sec:.2f} tokens/sec')
 		saving_config = config['saving']
 		#saving
-		if saving_config['save_checkpoints'] == 'True' and step % int(saving_config['save_every_n_batches']) == 0:
+		if saving_config['save_checkpoints'] == True and step % saving_config['save_every_n_batches'] == 0:
 			state = {
 					'step': step,
 					'epoch': epoch,
-					'config': config.__dict__['_sections'],
+					'config': config,
 					'model': model.state_dict(),
 					'loss': loss_accumulation.item() 
 					}
-			if saving_config['save_with_resume_option'] == 'True':
+			if saving_config['save_with_resume_option'] == True:
 				state['optimizer'] =  optimizer.state_dict()
 				state['scheduler'] =  scheduler.state_dict() 
 			torch.save(state, f'checkpoint_{step/grad_accum_steps/step_per_epoch:.4f}.pth') 

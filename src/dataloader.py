@@ -1,8 +1,8 @@
 from torch.utils.data._utils.collate import default_collate
-from configparser import ConfigParser
+import yaml
 
-config = ConfigParser()
-config.read('train.cfg')
+with open('train_config.yaml', 'r') as file:
+    config = yaml.safe_load(file)
 mini_batch = config['training']['mini_batch']
 block_size = config['model']['block_size']
 

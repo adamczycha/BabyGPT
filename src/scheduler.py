@@ -4,11 +4,11 @@ from torch.optim import Optimizer
 from configparser import ConfigParser
 
 class CosineScheduler(_LRScheduler):
-    def __init__(self, optimizer: Optimizer, config: ConfigParser):
+    def __init__(self, optimizer: Optimizer, config: dict):
         optim_conf = config['optimizer']
         self.warmup_steps = optim_conf['warmup_steps']
         self.max_steps = optim_conf['max_steps']
-        self.max_lr = optim_conf['max_lr']
+        self.max_lr = float(optim_conf['max_lr'])
         self.min_lr = self.max_lr * optim_conf['min_lr']
        
         super(_LRScheduler, self).__init__(optimizer)

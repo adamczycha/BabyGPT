@@ -8,7 +8,7 @@ from typing import Iterator
 from .dataset import TokenDataset
 
 class ChankSampler(Sampler):
-	def __init__(self, config: ConfigParser, dataset: TokenDataset, shuffle: bool = True, seed: int = 0):
+	def __init__(self, config: dict[str, dict[str, int]], dataset: TokenDataset, shuffle: bool = True, seed: int = 0):
 		self.dataset = dataset
 		self.seed = seed
 		self.shuffle = shuffle
