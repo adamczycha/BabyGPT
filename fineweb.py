@@ -18,7 +18,7 @@ if __name__ == '__main__':
 	del dataset
 	gc.collect()
 
-	def tokenize(example: dict[str, str]) -> dict[str, int]:
+	def tokenize(example: dict[str, str]) -> dict[str, object]:
 		ids = enc.encode_ordinary(example['text'])
 		ids.append(enc.eot_token)
 		out = {'ids': ids, 'len': len(ids)}
