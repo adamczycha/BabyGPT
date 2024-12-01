@@ -1,15 +1,19 @@
 import requests
 import os
 from tqdm import tqdm
+import pandas as pd
+import numpy as np
+import json
 import tiktoken
 import torch
-import json
+from transformers import AutoModelForCausalLM
+from  torch.nn import functional as F
 
 PATH = 'benchmarks/hellaswag'
 
 def download_val():
     response = requests.get('https://raw.githubusercontent.com/rowanz/hellaswag/refs/heads/master/data/hellaswag_val.jsonl', stream=True)
-    os.makedirs('../benchmarks/hellaswag', exist_ok=True)
+    os.makedirs('benchmarks/hellaswag', exist_ok=True)
     data_size = int(response.headers.get('content-length',0))
     cumulative_download = 0
     with open(f'{PATH}/hellaswag_val.jsonl', mode='wb') as file, tqdm(
@@ -55,4 +59,62 @@ def prepare_example(example):
     
     return tokens, mask, label
 
-download_val()
+def calculate_sum_loss(logits, tokens, mask):
+    # evaluate the autoregressive loss at all positions
+    shift_logits = (logits[..., :-1, :]).contiguous()
+    shift_tokens = (tokens[..., 1:]).contiguous()
+    flat_shift_logits = shift_logits.view(-1, shift_logits.size(-1))
+    flat_shift_tokens = shift_tokens.view(-1)
+    shift_losses = F.cross_entropy(flat_shift_logits, flat_shift_tokens, reduction='none')
+    shift_losses = shift_losses.view(tokens.size(0), -1)
+    # now get the average loss just for the completion region (where mask == 1), in each row
+    shift_mask = (mask[..., 1:]).contiguous() # we must shift mask, so we start at the last prompt token
+    masked_shift_losses = shift_losses * shift_mask
+    # sum and divide by the number of 1s in the mask
+    sum_loss = masked_shift_losses.sum(dim=1)
+    avg_loss = sum_loss / shift_mask.sum(dim=1)
+    # now we have a loss for each of the 4 completions
+    # the one with the lowest loss should be the most likely
+    
+    return sum_loss, avg_loss 
+
+
+@torch.no_grad()
+def evaluate(model_type, device):
+    torch.set_float32_matmul_precision('high') # use tf32
+    model = AutoModelForCausalLM.from_pretrained(model_type)
+    model.to(device)
+
+    num_correct_norm = 0
+    num_correct = 0
+    num_total = 0
+    for example in iterate_examples():
+        tokens, mask, label = prepare_example(example)
+        tokens = tokens.to(device)
+        mask = mask.to(device)
+        logits = model(tokens).logits
+        sum_loss, avg_loss = calculate_prediction(logits, tokens, mask)
+        pred = sum_loss.argmin().item()
+        pred_norm = avg_loss.argmin().item()
+        # accumulate stats
+        num_total += 1
+        num_correct += int(pred == label)
+        num_correct_norm += int(pred_norm == label)
+        print(f"{num_total} acc_norm: {num_correct_norm}/{num_total}={num_correct_norm/num_total:.4f}")
+
+        # debug: pretty print a few examples, and the losses in each case
+        if num_total < 10:
+            print(f"Context:\n {example['ctx']}")
+            print(f"Endings:")
+            for i, end in enumerate(example["endings"]):
+                print(f"{i} (loss: {avg_loss[i].item():.4f}) {end}")
+            print(f"predicted: {pred_norm}, actual: {label}")
+            print("---")
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-m", "--model_type", type=str, default="gpt2", help="the model type to use")
+    parser.add_argument("-d", "--device", type=str, default="cuda", help="the device to use")
+    args = parser.parse_args()
+    evaluate(args.model_type, args.device)

@@ -12,6 +12,7 @@ from src.sampler import ChankSampler
 from src.dataloader import custom_collate_fn
 from torch.utils.data import DataLoader
 from pathlib import Path
+from src.hellaswag import iterate_examples, calculate_sum_loss
 import yaml
 
 
@@ -130,12 +131,12 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 	
 
 	with ddpExist:
-		if step % config['validation']['every_n_batches'] == 0:
+		if step % config['evaluation']['validation_every_n_steps'] == 0:
 			model.eval()
 			val_loss = 0.0
 			val_iter = iter(val_loader)
-			val_config = config['validation']
-			for val_step in range(val_config['steps']):
+			val_config = config['evaluation']
+			for val_step in range(val_config['validation_micro_steps']):
 				x, y = next(val_iter)
 				x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
 				with ctx: 
@@ -146,6 +147,29 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 				dist.all_reduce(val_loss, op=dist.ReduceOp.AVG)
 			logger.info(f'validation loss: {val_loss.item():.4f} ')
 
+		
+		if step % config['evaluation']['hellaswag_every_n_steps'] == 0:
+			model.eval()
+			examples = iterate_examples()
+			for i, (tokens, mask, label) in enumerate(examples):
+				if i % ddp_rank == 0:
+					with ctx:
+						logits = model(exmaple)
+					sum_loss, avg_loss = calculate_sum_loss(logits, tokens, mask)
+					pred = sum_loss.argmin().item()
+					pred_norm = avg_loss.argmin().item()
+					num_total += 1
+					num_correct_norm += int(pred_norm == label)
+			if ddp:
+				num_total = torch.tensor(num_total, dtype=torch.long, device = device)
+				num_correct_norm = torch.tensor(num_correct_norm, device = device)
+				dist.all_reduce(num_correct_norm, op=dist.ReduceOp.SUM)
+				dist.all_reduce(num_total, op=dist.ReduceOp.SUM)
+				num_total.item()
+				num_correct_norm.item()
+			if master_process:
+				logger.info(f'HellaSwag step {step}. Result = {num_correct_norm}/{num_total}={(num_correct_norm/num_total):.4f}')
+			
 		loss_accumulation = 0.0
 		t0 = time()
 		model.train()

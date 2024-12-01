@@ -6,9 +6,10 @@ training:
   batch_size: 524288  # in tokens
   mini_batch: 40  # real batch size used to simulate bigger batches
 
-validation:
-  every_n_batches: 100
-  steps: 20
+evaluation:
+  validation_every_n_steps: 10
+  validation_micro_steps: 20
+  hellaswag_every_n_steps: 10
 
 optimizer:
   warmup_steps: 10
