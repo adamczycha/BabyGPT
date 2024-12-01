@@ -12,7 +12,7 @@ from src.sampler import ChankSampler
 from src.dataloader import custom_collate_fn
 from torch.utils.data import DataLoader
 from pathlib import Path
-from src.hellaswag import iterate_examples, calculate_sum_loss
+from src.hellaswag import iterate_examples, calculate_sum_loss, download_val, prepare_example
 import yaml
 
 
@@ -52,7 +52,7 @@ resume_run = False
 if config['training']['init_from'] == 'resume':
 	resume_run = True
 	model_dir = Path(config['training']['path_to_resume_training'])
-	assert os.path.exists(model_dir)
+	assert os.path.exists(model_dir), 'You want to resume training, but file does not exist!'
 
 	checkpoint = torch.load(model_dir)
 	config['model'] = checkpoint['config']['model']
@@ -98,7 +98,7 @@ if master_process:
 	logger.info(f'=> calculated in gradient accumation steps: {grad_accum_steps}')
 
 
-if torch.cuda.is_available() and bool(train_config['compile']):
+if torch.cuda.is_available() and train_config['compile']:
 	model.compile()
 
 train_dataset = TokenDataset(config=config, split='train')
@@ -141,7 +141,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 				x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
 				with ctx: 
 					logits, loss = model(x, y)
-				loss = loss / val_config['steps']
+				loss = loss / val_config['validation_micro_steps']
 				val_loss += loss.detach()
 			if ddp:
 				dist.all_reduce(val_loss, op=dist.ReduceOp.AVG)
@@ -150,11 +150,15 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 		
 		if step % config['evaluation']['hellaswag_every_n_steps'] == 0:
 			model.eval()
+			num_total = 0
+			num_correct_norm = 0
 			examples = iterate_examples()
-			for i, (tokens, mask, label) in enumerate(examples):
-				if i % ddp_rank == 0:
+			for i, example in enumerate(examples):
+				if i % ddp_world_size == ddp_rank:
+					tokens, mask, label = prepare_example(example)
+					tokens, mask = tokens.to(device), mask.to(device)
 					with ctx:
-						logits = model(exmaple)
+						logits, loss = model(tokens)
 					sum_loss, avg_loss = calculate_sum_loss(logits, tokens, mask)
 					pred = sum_loss.argmin().item()
 					pred_norm = avg_loss.argmin().item()
@@ -169,7 +173,9 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 				num_correct_norm.item()
 			if master_process:
 				logger.info(f'HellaSwag step {step}. Result = {num_correct_norm}/{num_total}={(num_correct_norm/num_total):.4f}')
-			
+
+		if config['training']['eval_only'] is True:
+			break
 		loss_accumulation = 0.0
 		t0 = time()
 		model.train()

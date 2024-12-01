@@ -8,7 +8,8 @@ from .dataset import TokenDataset
 
 class ChankSampler(Sampler):
 	def __init__(self, config: dict[str, dict[str, int]], dataset: TokenDataset, shuffle: bool | None = None, split: str = 'train', seed: int = 0):
-		assert split in ['validation', 'val'] and shuffle is None, 'You can not specify shuffle in validation mode.'
+		if split in ['validation', 'val']:
+			assert  shuffle is None, 'You can not specify shuffle in validation mode.'
 		self.dataset = dataset
 		self.split = split
 		self.seed = seed
@@ -25,7 +26,7 @@ class ChankSampler(Sampler):
 
 		if len(self.dataset) < step_size *ddp_world_size:
 			step_size = len(self.dataset) // ddp_world_size
-			tokens_used_in_val = self.config['validation']['steps'] * mini_batch * block_size
+			tokens_used_in_val = self.config['evaluation']['validation_micro_steps'] * mini_batch * block_size
 			assert step_size > tokens_used_in_val, f'You have to little tokens for validation. {tokens_used_in_val} is used in val on 1 GPU you have only {step_size}.'
 		document_indices = self.locate_document_EOF_to_create_chank(step_size = step_size, search_range = 20000)
 

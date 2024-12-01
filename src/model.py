@@ -116,7 +116,7 @@ class GPT(nn.Module):
 		elif isinstance(module, nn.Embedding):
 			torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-	def forward(self, idx: torch.Tensor, targets: torch.Tensor | None) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+	def forward(self, idx: torch.Tensor, targets: torch.Tensor | None = None) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
 		B, T = idx.size()
 		assert T <= self.config.block_size, f'Model cannot operate {T} as a block size maximum is {self.config.block_size}'
 		pos = torch.arange(0, T, dtype=torch.long, device=idx.device)
