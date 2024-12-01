@@ -100,33 +100,55 @@ if master_process:
 if torch.cuda.is_available() and bool(train_config['compile']):
 	model.compile()
 
-dataset = TokenDataset(config=config, split='train', seed=0)
-sampler = ChankSampler(config=config, dataset=dataset, shuffle=True, seed=0)
+train_dataset = TokenDataset(config=config, split='train')
+sampler = ChankSampler(config=config, dataset=train_dataset, shuffle=True, seed=0)
 train_loader = DataLoader(
-	dataset=dataset, batch_size=(mini_batch * block_size), sampler=sampler, collate_fn=custom_collate_fn, pin_memory=True
+	dataset=train_dataset, batch_size=(mini_batch * block_size), sampler=sampler, collate_fn=custom_collate_fn, pin_memory=True
 )
+
+val_dataset = TokenDataset(config=config, split='val')
+val_sampler = ChankSampler(config, dataset=val_dataset, split='validation')
+val_loader = DataLoader(dataset = val_dataset, batch_size=(mini_batch * block_size), sampler = val_sampler, collate_fn=custom_collate_fn, pin_memory=True )
 
 if ddp:
 	model = DDP(model, device_ids=[ddp_local_rank])
 
-step_per_epoch = len(dataset) // batch_size
+step_per_epoch = len(train_dataset) // batch_size
 if master_process:
 	logger.info(f' {step_per_epoch} batches in epoch')
 
 epoch = -1 if 'checkpoint' not in locals() else checkpoint['epoch']
 last_step = 0 if 'checkpoint' not in locals() else checkpoint['step'] + 1
 scaler = torch.amp.GradScaler(enabled=(device == 'cuda'))
+ddpExist = model.no_sync() if ddp else nullcontext()
 for step in range(last_step, int(config['optimizer']['max_steps'])):
-	t0 = time()
-	loss_accumulation = 0.0
-
 	if step % (step_per_epoch - 1) == 0 or resume_run:
 		epoch += 1
 		sampler.set_epoch(epoch)
 		train_iter = iter(train_loader)
 		resume_run = False
-	ddpExist = model.no_sync() if ddp else nullcontext()
+	
+
 	with ddpExist:
+		if step % config['validation']['every_n_batches'] == 0:
+			model.eval()
+			val_loss = 0.0
+			val_iter = iter(val_loader)
+			val_config = config['validation']
+			for val_step in range(val_config['steps']):
+				x, y = next(val_iter)
+				x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
+				with ctx: 
+					logits, loss = model(x, y)
+				loss = loss / val_config['steps']
+				val_loss += loss.detach()
+			if ddp:
+				dist.all_reduce(val_loss, op=dist.ReduceOp.AVG)
+			logger.info(f'validation loss: {val_loss.item():.4f} ')
+
+		loss_accumulation = 0.0
+		t0 = time()
+		model.train()
 		for micro_step in range(grad_accum_steps):
 			x, y = next(train_iter)
 			x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
@@ -156,7 +178,8 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 		saving_config = config['saving']
 		# saving
 		if saving_config['save_checkpoints'] and step % saving_config['save_every_n_batches'] == 0:
-			state = {'step': step, 'epoch': epoch, 'config': config, 'model': model.state_dict(), 'loss': loss_accumulation.item()}
+			raw_model = model.module if ddp else model
+			state = {'step': step, 'epoch': epoch, 'config': config, 'model': raw_model.state_dict(), 'loss': loss_accumulation.item()}
 			if saving_config['save_with_resume_option']:
 				state['optimizer'] = optimizer.state_dict()
 				state['scheduler'] = scheduler.state_dict()

@@ -6,6 +6,10 @@ training:
   batch_size: 524288  # in tokens
   mini_batch: 40  # real batch size used to simulate bigger batches
 
+validation:
+  every_n_batches: 100
+  steps: 20
+
 optimizer:
   warmup_steps: 10
   max_steps: 50

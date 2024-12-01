@@ -7,25 +7,33 @@ from .dataset import TokenDataset
 
 
 class ChankSampler(Sampler):
-	def __init__(self, config: dict[str, dict[str, int]], dataset: TokenDataset, shuffle: bool = True, seed: int = 0):
+	def __init__(self, config: dict[str, dict[str, int]], dataset: TokenDataset, shuffle: bool | None = None, split: str = 'train', seed: int = 0):
+		assert split in ['validation', 'val'] and shuffle is None, 'You can not specify shuffle in validation mode.'
 		self.dataset = dataset
+		self.split = split
 		self.seed = seed
 		self.shuffle = shuffle
 		self.config = config
 		self.epoch = 0
 
 	def __iter__(self) -> Iterator[int]:
-		document_indices = self.locate_document_EOF_to_create_chank()
+		step_size = 30000000
 
-		# drop last to fit ideally for multiple GPU run
 		ddp_world_size = int(os.environ.get('WORLD_SIZE', 1))
 		mini_batch = self.config['training']['mini_batch']
 		block_size = self.config['model']['block_size']
+
+		if len(self.dataset) < step_size *ddp_world_size:
+			step_size = len(self.dataset) // ddp_world_size
+			tokens_used_in_val = self.config['validation']['steps'] * mini_batch * block_size
+			assert step_size > tokens_used_in_val, f'You have to little tokens for validation. {tokens_used_in_val} is used in val on 1 GPU you have only {step_size}.'
+		document_indices = self.locate_document_EOF_to_create_chank(step_size = step_size, search_range = 20000)
 
 		if self.shuffle:
 			random.seed(self.seed + self.epoch)
 			random.shuffle(document_indices)
 
+		# drop last to fit ideally for multiple GPU run
 		document_indices = self.drop_last_in_every_document_stream(document_indices, ddp_world_size, mini_batch, block_size)
 
 		ddp_rank = int(os.environ.get('RANK', 0))
@@ -37,14 +45,15 @@ class ChankSampler(Sampler):
 		self.epoch = epoch
 
 	def locate_document_EOF_to_create_chank(
-		self, cursor: int = 30000000, step_size: int = 30000000, search_range: int = 20000
+		self, step_size: int = 30000000, search_range: int = 20000
 	) -> list[tuple[int, int]]:
+		cursor = step_size 
 		document_boundry: list[int] = []
 		while cursor < len(self.dataset):
 			# Search for EOF token in a fixed range around the cursor\
 			EOF_list: list[int] = []
 			while EOF_list == []:
-				search_start = max(cursor - search_range, 0)
+				search_start = cursor
 				search_end = min(cursor + search_range, len(self.dataset))
 				EOF_list = np.where(self.dataset.tokens[search_start:search_end] == 50256)[0]
 
