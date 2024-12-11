@@ -7,9 +7,11 @@ from .dataset import TokenDataset
 
 
 class ChankSampler(Sampler):
-	def __init__(self, config: dict[str, dict[str, int]], dataset: TokenDataset, shuffle: bool | None = None, split: str = 'train', seed: int = 0):
+	def __init__(
+		self, config: dict[str, dict[str, int]], dataset: TokenDataset, shuffle: bool | None = None, split: str = 'train', seed: int = 0
+	):
 		if split in ['validation', 'val']:
-			assert  shuffle is None, 'You can not specify shuffle in validation mode.'
+			assert shuffle is None, 'You can not specify shuffle in validation mode.'
 		self.dataset = dataset
 		self.split = split
 		self.seed = seed
@@ -24,11 +26,13 @@ class ChankSampler(Sampler):
 		mini_batch = self.config['training']['mini_batch']
 		block_size = self.config['model']['block_size']
 
-		if len(self.dataset) < step_size *ddp_world_size:
+		if len(self.dataset) < step_size * ddp_world_size:
 			step_size = len(self.dataset) // ddp_world_size
 			tokens_used_in_val = self.config['evaluation']['validation_micro_steps'] * mini_batch * block_size
-			assert step_size > tokens_used_in_val, f'You have to little tokens for validation. {tokens_used_in_val} is used in val on 1 GPU you have only {step_size}.'
-		document_indices = self.locate_document_EOF_to_create_chank(step_size = step_size, search_range = 20000)
+			assert (
+				step_size > tokens_used_in_val
+			), f'You have to little tokens for validation. {tokens_used_in_val} is used in val on 1 GPU you have only {step_size}.'
+		document_indices = self.locate_document_EOF_to_create_chank(step_size=step_size, search_range=20000)
 
 		if self.shuffle:
 			random.seed(self.seed + self.epoch)
@@ -45,10 +49,8 @@ class ChankSampler(Sampler):
 	def set_epoch(self, epoch: int) -> None:
 		self.epoch = epoch
 
-	def locate_document_EOF_to_create_chank(
-		self, step_size: int = 30000000, search_range: int = 20000
-	) -> list[tuple[int, int]]:
-		cursor = step_size 
+	def locate_document_EOF_to_create_chank(self, step_size: int = 30000000, search_range: int = 20000) -> list[tuple[int, int]]:
+		cursor = step_size
 		document_boundry: list[int] = []
 		while cursor < len(self.dataset):
 			# Search for EOF token in a fixed range around the cursor\

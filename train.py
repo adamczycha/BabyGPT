@@ -12,7 +12,7 @@ from src.sampler import ChankSampler
 from src.dataloader import custom_collate_fn
 from torch.utils.data import DataLoader
 from pathlib import Path
-from src.hellaswag import iterate_examples, calculate_sum_loss, download_val, prepare_example
+from src.hellaswag import iterate_examples, calculate_sum_loss, prepare_example
 import yaml
 
 
@@ -109,7 +109,9 @@ train_loader = DataLoader(
 
 val_dataset = TokenDataset(config=config, split='val')
 val_sampler = ChankSampler(config, dataset=val_dataset, split='validation')
-val_loader = DataLoader(dataset = val_dataset, batch_size=(mini_batch * block_size), sampler = val_sampler, collate_fn=custom_collate_fn, pin_memory=True )
+val_loader = DataLoader(
+	dataset=val_dataset, batch_size=(mini_batch * block_size), sampler=val_sampler, collate_fn=custom_collate_fn, pin_memory=True
+)
 
 if ddp:
 	model = DDP(model, device_ids=[ddp_local_rank])
@@ -128,7 +130,6 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 		sampler.set_epoch(epoch)
 		train_iter = iter(train_loader)
 		resume_run = False
-	
 
 	with ddpExist:
 		if step % config['evaluation']['validation_every_n_steps'] == 0:
@@ -139,7 +140,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 			for val_step in range(val_config['validation_micro_steps']):
 				x, y = next(val_iter)
 				x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
-				with ctx: 
+				with ctx:
 					logits, loss = model(x, y)
 				loss = loss / val_config['validation_micro_steps']
 				val_loss += loss.detach()
@@ -147,7 +148,6 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 				dist.all_reduce(val_loss, op=dist.ReduceOp.AVG)
 			logger.info(f'validation loss: {val_loss.item():.4f} ')
 
-		
 		if step % config['evaluation']['hellaswag_every_n_steps'] == 0:
 			model.eval()
 			num_total = 0
@@ -165,8 +165,8 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 					num_total += 1
 					num_correct_norm += int(pred_norm == label)
 			if ddp:
-				num_total = torch.tensor(num_total, dtype=torch.long, device = device)
-				num_correct_norm = torch.tensor(num_correct_norm, device = device)
+				num_total = torch.tensor(num_total, dtype=torch.long, device=device)
+				num_correct_norm = torch.tensor(num_correct_norm, device=device)
 				dist.all_reduce(num_correct_norm, op=dist.ReduceOp.SUM)
 				dist.all_reduce(num_total, op=dist.ReduceOp.SUM)
 				num_total.item()
