@@ -7,6 +7,7 @@ from typing import Optional, Tuple
 
 
 @dataclass
+@dataclass
 class GPTConfig:
 	block_size: int = 1024
 	vocab_size: int = 50257
@@ -14,14 +15,13 @@ class GPTConfig:
 	n_layer: int = 12
 	n_embd: int = 768
 
-	def __init__(self, config: dict[str, int]) -> None:
-		super().__init__()
-		if isinstance(config, dict):
-			self.block_size = config['block_size']
-			self.vocab_size = config['vocab_size']
-			self.n_head = config['n_head']
-			self.n_layer = config['n_layer']
-			self.n_embd = config['n_embd']
+	def __init__(self, config: Optional[dict[str, int]] = None) -> None:
+		if config:
+			self.block_size = config.get('block_size', self.block_size)
+			self.vocab_size = config.get('vocab_size', self.vocab_size)
+			self.n_head = config.get('n_head', self.n_head)
+			self.n_layer = config.get('n_layer', self.n_layer)
+			self.n_embd = config.get('n_embd', self.n_embd)
 
 
 class CasualSelfAttention(nn.Module):
@@ -87,7 +87,7 @@ class Block(nn.Module):
 
 
 class GPT(nn.Module):
-	def __init__(self, config: dict[str, dict[str, int]] | GPTConfig) -> None:
+	def __init__(self, config: dict[str, dict[str, int]] | GPTConfig = GPTConfig()) -> None:
 		super().__init__()
 		self.config = config if isinstance(config, GPTConfig) else GPTConfig(config['model'])
 
@@ -116,7 +116,7 @@ class GPT(nn.Module):
 		elif isinstance(module, nn.Embedding):
 			torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-	def forward(self, idx: torch.Tensor, targets: torch.Tensor | None) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+	def forward(self, idx: torch.Tensor, targets: torch.Tensor | None = None) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
 		B, T = idx.size()
 		assert T <= self.config.block_size, f'Model cannot operate {T} as a block size maximum is {self.config.block_size}'
 		pos = torch.arange(0, T, dtype=torch.long, device=idx.device)

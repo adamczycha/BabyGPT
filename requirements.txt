@@ -9,3 +9,4 @@ fsspec[http]==2024.6.1
 tox
 ruff
 mypy
+tqdm

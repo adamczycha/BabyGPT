@@ -7,7 +7,7 @@ from typing import Type
 logger = logging.getLogger(__name__)
 
 stream_handle = logging.StreamHandler()
-file_handle = logging.FileHandler(filename=f"{datetime.today().strftime('%Y-%m-%d_%H:%M:%S')}_gpt_run.log")
+file_handle = logging.FileHandler(filename=f"logs/{datetime.today().strftime('%Y-%m-%d_%H:%M:%S')}_gpt_run.log")
 
 stream_handle.setLevel(logging.INFO)
 file_handle.setLevel(logging.INFO)

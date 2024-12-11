@@ -1,10 +1,15 @@
 training:
-  init_from: resume  # 'resume', 'gpt2', 'scratch'
+  init_from: scratch  # 'resume', 'gpt2', 'scratch'
   path_to_resume_training: checkpoint_0.0000.pth
-  eval_only: true
+  eval_only: false
   compile: true
   batch_size: 524288  # in tokens
-  mini_batch: 40  # real batch size used to simulate bigger batches
+  mini_batch: 16  # real batch size used to simulate bigger batches
+
+evaluation:
+  validation_every_n_steps: 250
+  validation_micro_steps: 20
+  hellaswag_every_n_steps: 250
 
 optimizer:
   warmup_steps: 10
@@ -21,7 +26,7 @@ model:
 
 saving:
   save_checkpoints: true
-  save_every_n_batches: 10
+  save_every_n_batches: 250
   save_end_model: true
   save_with_resume_option: true
 

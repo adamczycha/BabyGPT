@@ -5,9 +5,8 @@ from configparser import ConfigParser
 
 
 class TokenDataset(Dataset):
-	def __init__(self, config: ConfigParser, split: str, seed: int) -> None:
+	def __init__(self, config: ConfigParser, split: str) -> None:
 		# dataset path: {dataset}/test/test.bin dtype = int16
-		self.seed = seed
 		self.config = config
 		self.split = split
 		self.dataset = config['data']['dataset']
