@@ -23,6 +23,8 @@ model:
   n_head: 12
   n_layer: 12
   n_embd: 768
+  kv_group_factor: 2 # every n queries has one k, v projection
+
 
 saving:
   save_checkpoints: true
