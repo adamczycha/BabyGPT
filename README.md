@@ -9,7 +9,8 @@ LLM inspired by Andrej Karparthy and KellerJordan.
 
 Architecture is based on GPT2 as described by Andrej Kaparthy. 
 
-DATA
+## DATA
+
 The model is trained on the Hugging Face dataset Fineweb 10B samples. To eliminate cyclic behavior encountered by Mr. Karpathy, I've developed a randomization process that allows training on chaining the order of data.
 ![cyclic behavior during training on FineWeb ](https://github.com/user-attachments/assets/57291b0c-1adc-41f3-9215-b329839a079d)
 
@@ -22,7 +23,7 @@ Chunks are streamlined into data streams for effortless use in multi-GPU trainin
 The last documents in every stream are temporarily shortened to fit into the gradient accumulation batch_size * block_size perfectly.
 
 
-# HELLA SWAG EVAL
+## HELLA SWAG EVAL
 
 - "ctx": "A man is sitting on a roof. he",
 - "label": 3,
