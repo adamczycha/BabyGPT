@@ -123,7 +123,7 @@ if master_process:
 epoch = -1 if 'checkpoint' not in locals() else checkpoint['epoch']
 last_step = 0 if 'checkpoint' not in locals() else checkpoint['step'] + 1
 scaler = torch.amp.GradScaler(enabled=(device == 'cuda'))
-ddpExist = model.no_sync() if ddp else nullcontext()
+
 for step in range(last_step, int(config['optimizer']['max_steps'])):
 	if step % (step_per_epoch - 1) == 0 or resume_run:
 		epoch += 1
@@ -131,7 +131,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 		train_iter = iter(train_loader)
 		resume_run = False
 
-	with ddpExist:
+	with (model.no_sync() if ddp else nullcontext()):
 		if step % config['evaluation']['validation_every_n_steps'] == 0:
 			model.eval()
 			val_loss = 0.0

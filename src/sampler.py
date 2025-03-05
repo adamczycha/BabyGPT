@@ -27,7 +27,7 @@ class ChankSampler(Sampler):
 		block_size = self.config['model']['block_size']
 
 		if len(self.dataset) < step_size * ddp_world_size:
-			step_size = len(self.dataset) // ddp_world_size
+			step_size = (len(self.dataset) // ddp_world_size)-1
 			tokens_used_in_val = self.config['evaluation']['validation_micro_steps'] * mini_batch * block_size * ddp_world_size
 			assert (
 				step_size > tokens_used_in_val
@@ -75,7 +75,7 @@ class ChankSampler(Sampler):
 					
 					break
 			
-			if len(self.dataset.tokens) - cursor < (document_boundry[0])*0.8:
+			if len(self.dataset) - cursor < (document_boundry[0])*0.8:
 				break
 			cursor += step_size
 			
@@ -87,6 +87,7 @@ class ChankSampler(Sampler):
 		document_indices = [(document_boundry[i], document_boundry[i + 1]) for i in range(len(document_boundry) - 1)]
 
 		# Create document indices
+		print('document_indices',document_indices)
 		return document_indices
 
 	def drop_last_in_every_document_stream(
