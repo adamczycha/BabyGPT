@@ -12,7 +12,7 @@ num_proc = psutil.cpu_count(logical=False)
 enc = tiktoken.get_encoding('gpt2')
 
 if __name__ == '__main__':
-	dataset = load_dataset('HuggingFaceFW/fineweb-edu', name='sample-10BT', split='train')
+	dataset = load_dataset('HuggingFaceFW/fineweb-2', name='pol_Latn', split='train[:10%]', num_proc=num_proc)
 	split_dataset = dataset.train_test_split(test_size=0.0005, seed=0, shuffle=True, writer_batch_size=10000)
 	split_dataset['val'] = split_dataset.pop('test')
 	del dataset
@@ -36,7 +36,7 @@ if __name__ == '__main__':
 
 	for split, dset in tokenized.items():
 		arr_len = np.sum(dset['len'], dtype=np.uint64)
-		filename = os.path.join(os.path.dirname(__file__), f'{split}.bin')
+		filename = os.path.join('/workspace', f'{split}.bin')
 		dtype = np.uint16  # (can do since enc.max_token_value == 50256 is < 2**16)
 		arr = np.memmap(filename, dtype=dtype, mode='w+', shape=(arr_len,))
 		total_batches = 1024
