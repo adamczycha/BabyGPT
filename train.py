@@ -91,7 +91,7 @@ try:
 	assert batch_size % (mini_batch * block_size * ddp_world_size) == 0
 except AssertionError:
 	if master_process:
-		logger.critical(f'BATCH_SIZE is not divisible by mini_batch * block_size * world_size({mini_batch * block_size * ddp_world_size})')
+		logger.critical(f'BATCH_SIZE is not divisible by mini_batch * block_size * world_size. Batch_size => ({mini_batch * block_size * ddp_world_size})')
 grad_accum_steps = batch_size // (mini_batch * block_size * ddp_world_size)
 if master_process:
 	logger.info(f'total desiered batch size {batch_size}')
@@ -148,7 +148,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 				dist.all_reduce(val_loss, op=dist.ReduceOp.AVG)
 			logger.info(f'validation loss: {val_loss.item():.4f} ')
 
-		if step % config['evaluation']['hellaswag_every_n_steps'] == 0:
+		if step % config['evaluation']['hellaswag_every_n_steps'] == 0 and config['evaluation']['hellaswag_eval']:
 			model.eval()
 			num_total = 0
 			num_correct_norm = 0
