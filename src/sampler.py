@@ -82,12 +82,10 @@ class ChankSampler(Sampler):
 
 
 
-		# Add the start and end boundaries
+		# Add the start  boundaries
 		document_boundry.insert(0, 0)
 		document_indices = [(document_boundry[i], document_boundry[i + 1]) for i in range(len(document_boundry) - 1)]
 
-		# Create document indices
-		print('document_indices',document_indices)
 		return document_indices
 
 	def drop_last_in_every_document_stream(

@@ -15,7 +15,7 @@ from pathlib import Path
 from src.hellaswag import iterate_examples, calculate_sum_loss, prepare_example
 import yaml
 import tiktoken
-import torch.functional as F
+import torch.nn.functional as F
 
 
 with open('train_config.yaml', 'r') as file:
@@ -49,7 +49,7 @@ else:
 torch.manual_seed(1337)
 if torch.cuda.is_available():
 	torch.cuda.manual_seed(1337)
-
+print(f'tutaj0 {ddp_rank}')
 resume_run = False
 if config['training']['init_from'] == 'resume':
 	resume_run = True
@@ -81,7 +81,7 @@ elif config['training']['init_from'] == 'scratch':
 	optimizer = model.configure_optimizer(weight_decay=0.1, learning_rate=0, device=device)
 	scheduler = CosineScheduler(optimizer, config)  # does not depend on optimizer learnig rate
 
-
+print(f'tutaj1 {ddp_rank}')
 train_config = config['training']
 model_config = config['model']
 model_eval = config['evaluation']
@@ -100,25 +100,31 @@ if master_process:
 	logger.info(f'total desiered batch size {batch_size}')
 	logger.info(f'=> calculated in gradient accumation steps: {grad_accum_steps}')
 
-
+print(f'tutaj2 {ddp_rank}')
 if torch.cuda.is_available() and train_config['compile']:
 	model.compile()
 
+print(f'tutaj2.1 {ddp_rank}')
 train_dataset = TokenDataset(config=config, split='train')
 sampler = ChankSampler(config=config, dataset=train_dataset, shuffle=True, seed=0)
 train_loader = DataLoader(
 	dataset=train_dataset, batch_size=(mini_batch * block_size), sampler=sampler, collate_fn=custom_collate_fn, pin_memory=True
 )
-
+print(f'tutaj2.2 {ddp_rank}')
 val_dataset = TokenDataset(config=config, split='val')
+print(f'tutaj2.3 {ddp_rank}')
 val_sampler = ChankSampler(config, dataset=val_dataset, split='validation')
+print(f'tutaj2.4 {ddp_rank}')
 val_loader = DataLoader(
 	dataset=val_dataset, batch_size=(mini_batch * block_size), sampler=val_sampler, collate_fn=custom_collate_fn, pin_memory=True
 )
-
+print(f'tutaj2.5 {ddp_rank}')
 if ddp:
+	print(f'tutaj2.6 {ddp_rank} {ddp_local_rank}')
+	print(f'tutaj2.7 {ddp_rank} {model}')
 	model = DDP(model, device_ids=[ddp_local_rank])
-
+	print(f'tutaj2.8 {ddp_rank} {model}')
+print(f'tutaj3 {ddp_rank}')
 step_per_epoch = len(train_dataset) // batch_size
 if master_process:
 	logger.info(f' {step_per_epoch} batches in epoch')
@@ -135,13 +141,13 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 		resume_run = False
 
 	with (model.no_sync() if ddp else nullcontext()):
-		# once in a while generate from the model (except step 0, which is noise)
-		if (((step > 0 and step % model_eval['sample_every_n'] == 0) or last_step)) and train_config['sample']:
+		print(f'tutaj4 {ddp_rank}')
+		if (((step > 0 and step % model_eval['sample_every_n'] == 0) or step == config['optimizer']['max_steps']-1)) and train_config['sample']:
 			model.eval()
-			num_return_sequences = 4
+			num_return_sequences = 2
 			max_length = 32
 			enc = tiktoken.get_encoding('gpt2')
-			tokens = enc.encode("Reynevan w raz z Szarlej")
+			tokens = enc.encode("Reynevan w raz z Szarlejem ")
 			tokens = torch.tensor(tokens, dtype=torch.long)
 			tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1)
 			xgen = tokens.to(device)
@@ -162,7 +168,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 				tokens = xgen[i, :max_length].tolist()
 				decoded = enc.decode(tokens)
 				print(f"rank {ddp_rank} sample {i}: {decoded}")
-
+		print(f'tutaj5 {ddp_rank}')
 		if step % model_eval['validation_every_n_steps'] == 0:
 			model.eval()
 			val_loss = 0.0
@@ -204,7 +210,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 			if master_process:
 				logger.info(f'HellaSwag step {step}. Result = {num_correct_norm}/{num_total}={(num_correct_norm/num_total):.4f}')
 
-		if config['training']['eval_only'] is True:
+		if train_config['training'] is False:
 			break
 		loss_accumulation = 0.0
 		t0 = time()
@@ -237,7 +243,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 		)
 		saving_config = config['saving']
 		# saving
-		if saving_config['save_checkpoints'] and step % saving_config['save_every_n_batches'] == 0:
+		if (saving_config['save_checkpoints'] and step % saving_config['save_every_n_batches'] == 0) or (saving_config['save_end_model'] and step == config['optimizer']['max_steps']-1):
 			raw_model = model.module if ddp else model
 			state = {'step': step, 'epoch': epoch, 'config': config, 'model': raw_model.state_dict(), 'loss': loss_accumulation.item()}
 			if saving_config['save_with_resume_option']:

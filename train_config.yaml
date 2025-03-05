@@ -16,7 +16,7 @@ evaluation:
 
 optimizer:
   warmup_steps: 10
-  max_steps: 50
+  max_steps: 500
   max_lr: 6e-4
   min_lr: 0.1  # min_lr is used as fraction min_lr = (min_lr * max_lr)
 
@@ -33,7 +33,7 @@ saving:
   save_checkpoints: false
   save_every_n_batches: 250
   save_end_model: true
-  save_with_resume_option: true
+  save_with_resume_option: false
 
 data:
   dataset: wojny_husyckie
