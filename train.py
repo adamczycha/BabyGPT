@@ -14,6 +14,8 @@ from torch.utils.data import DataLoader
 from pathlib import Path
 from src.hellaswag import iterate_examples, calculate_sum_loss, prepare_example
 import yaml
+import tiktoken
+import torch.functional as F
 
 
 with open('train_config.yaml', 'r') as file:
@@ -82,6 +84,7 @@ elif config['training']['init_from'] == 'scratch':
 
 train_config = config['training']
 model_config = config['model']
+model_eval = config['evaluation']
 batch_size = train_config['batch_size']
 mini_batch = train_config['mini_batch']
 block_size = model_config['block_size']
@@ -132,23 +135,50 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 		resume_run = False
 
 	with (model.no_sync() if ddp else nullcontext()):
-		if step % config['evaluation']['validation_every_n_steps'] == 0:
+		# once in a while generate from the model (except step 0, which is noise)
+		if (((step > 0 and step % model_eval['sample_every_n'] == 0) or last_step)) and train_config['sample']:
+			model.eval()
+			num_return_sequences = 4
+			max_length = 32
+			enc = tiktoken.get_encoding('gpt2')
+			tokens = enc.encode("Reynevan w raz z Szarlej")
+			tokens = torch.tensor(tokens, dtype=torch.long)
+			tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1)
+			xgen = tokens.to(device)
+			sample_rng = torch.Generator(device=device)
+			sample_rng.manual_seed(42 + ddp_rank)
+			while xgen.size(1) < max_length:
+				# forward the model to get the logits
+				with torch.no_grad():
+					with ctx:
+						logits, loss = model(xgen)
+					logits = logits[:, -1, :] 
+					probs = F.softmax(logits, dim=-1)
+					topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
+					ix = torch.multinomial(topk_probs, 1, generator=sample_rng) 
+					xcol = torch.gather(topk_indices, -1, ix) 
+					xgen = torch.cat((xgen, xcol), dim=1)
+			for i in range(num_return_sequences):
+				tokens = xgen[i, :max_length].tolist()
+				decoded = enc.decode(tokens)
+				print(f"rank {ddp_rank} sample {i}: {decoded}")
+
+		if step % model_eval['validation_every_n_steps'] == 0:
 			model.eval()
 			val_loss = 0.0
 			val_iter = iter(val_loader)
-			val_config = config['evaluation']
-			for val_step in range(val_config['validation_micro_steps']):
+			for val_step in range(model_eval['validation_micro_steps']):
 				x, y = next(val_iter)
 				x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
 				with ctx:
 					logits, loss = model(x, y)
-				loss = loss / val_config['validation_micro_steps']
+				loss = loss / model_eval['validation_micro_steps']
 				val_loss += loss.detach()
 			if ddp:
 				dist.all_reduce(val_loss, op=dist.ReduceOp.AVG)
 			logger.info(f'validation loss: {val_loss.item():.4f} ')
 
-		if step % config['evaluation']['hellaswag_every_n_steps'] == 0 and config['evaluation']['hellaswag_eval']:
+		if step % model_eval['hellaswag_every_n_steps'] == 0 and train_config['eval']:
 			model.eval()
 			num_total = 0
 			num_correct_norm = 0
