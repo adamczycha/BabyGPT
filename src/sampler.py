@@ -65,31 +65,27 @@ class ChankSampler(Sampler):
 					search_start += search_range
 					search_end += search_range
 					
-					print(f'roszerz{timer}')
 					timer -= 1
 				elif timer == 0: 
-					document_boundry.extend([cursor])
-					print(f'timer ==0 {document_boundry}') # if for same reason creator would forget that model needs EOF tokens...
+					document_boundry.extend([cursor]) # if for same reason creator would forget that model needs EOF tokens...
 					break
 				else:
 					EOF_index = search_start + EOF_list[0]
 					document_boundry.extend([EOF_index])
-					print(f'break  EOF_INDEX {EOF_index}')
+					
 					break
-				
+			
+			if len(self.dataset.tokens) - cursor < (document_boundry[0])*0.8:
+				break
 			cursor += step_size
-			print(f'cursor = {cursor} documnet_boundry = {document_boundry}')
+			
 
 
 
 		# Add the start and end boundaries
 		document_boundry.insert(0, 0)
-		# check if there is roughtly normal amount of tokens at the end of dataset
-		if len(self.dataset) - document_boundry[-1] > (document_boundry[0])*0.9:
-			document_boundry.append(len(self.dataset))
 		document_indices = [(document_boundry[i], document_boundry[i + 1]) for i in range(len(document_boundry) - 1)]
 
-		print(f' first_produced = >{document_indices}')
 		# Create document indices
 		return document_indices
 
@@ -102,35 +98,25 @@ class ChankSampler(Sampler):
 		for rank in range(ddp_world_size):
 			documents_ranges = list(document_indices[rank::ddp_world_size])
 			length_data_per_rank.append(sum(map(doc_length, documents_ranges)))
-		print(length_data_per_rank)
 		max_token_length = min(length_data_per_rank) - (min(length_data_per_rank) % (mini_batch * block_size))
-		print('1min  length_data_per_rank', min(length_data_per_rank))
-		print('min length_data_per_rank % mini_batch * block_size',(min(length_data_per_rank) % (mini_batch * block_size)) )
 		index_remove = []
 		# drop or shorten documents to fit perfectly into mini_batch * block_size
 		for rank in range(ddp_world_size):
 			indices = list(range(rank, len(document_indices), ddp_world_size))
 			drop_tokens = 0
 			for idx in indices[::-1]:
-				print('idx',idx)
+
 				drop_tokens += doc_length(document_indices[idx])
-				print('drop_tokens',drop_tokens)
+
 				if length_data_per_rank[rank] - drop_tokens <= max_token_length:
-					print('max_token_length', max_token_length)
 					start, end = document_indices[idx]
-					print('start',start ,'end', end )
 					new_steam_length = (length_data_per_rank[rank] - drop_tokens)
 					lacking_tokens = max_token_length - new_steam_length
-					print('lacking_tokens',lacking_tokens)
 					end = start + lacking_tokens
-					print('end', end)
 					document_indices[idx] = (start, end)
-					print('document_indices',document_indices)
 					break
 				else:
 					index_remove.append(idx)
-		print(index_remove)
 		for idx in sorted(index_remove, reverse=True):
 			del document_indices[idx]
-		print(f'document_indices = {document_indices }')
 		return document_indices
