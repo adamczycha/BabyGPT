@@ -28,10 +28,10 @@ class ChankSampler(Sampler):
 
 		if len(self.dataset) < step_size * ddp_world_size:
 			step_size = (len(self.dataset) // ddp_world_size)-1
-			tokens_used_in_val = self.config['evaluation']['validation_micro_steps'] * mini_batch * block_size * ddp_world_size
+			tokens_used_in_val = self.config['evaluation']['validation_micro_steps'] * mini_batch * block_size 
 			assert (
 				step_size > tokens_used_in_val
-			), f'You have to little tokens for validation. {tokens_used_in_val} is used in val on 1 GPU you have only {step_size}.'
+			), f'You have to little tokens for validation. {tokens_used_in_val} is used in val you have only {step_size}.'
 		document_indices = self.locate_document_EOF_to_create_chank(step_size=step_size, search_range=20000)
 
 		if self.shuffle:
@@ -42,9 +42,10 @@ class ChankSampler(Sampler):
 		document_indices = self.drop_last_in_every_document_stream(document_indices, ddp_world_size, mini_batch, block_size)
 
 		ddp_rank = int(os.environ.get('RANK', 0))
-		for chank_start, chank_end in document_indices[ddp_rank::ddp_world_size]:
-			for idx in range(chank_start, chank_end):
-				yield idx
+		selected_indices = (document_indices[ddp_rank::ddp_world_size] if self.split == 'train' else document_indices)
+		for chank_start, chank_end in selected_indices:
+			yield from range(chank_start, chank_end)
+
 
 	def set_epoch(self, epoch: int) -> None:
 		self.epoch = epoch
