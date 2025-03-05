@@ -32,8 +32,9 @@ if __name__ == '__main__':
 	split_dataset = chunked_dataset.train_test_split(test_size=0.0005, seed=0, shuffle=True, writer_batch_size=10000)
 	split_dataset['val'] = split_dataset.pop('test')
 	del chunked_dataset
-	gc.collect()
 	shutil.rmtree('/root/.cache/huggingface')
+	gc.collect()
+	
 	
 
 	def tokenize(example: dict[str, list[str]]) -> dict[str, object]:
