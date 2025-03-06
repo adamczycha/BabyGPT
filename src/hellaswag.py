@@ -14,8 +14,8 @@ PATH = 'benchmarks/hellaswag'
 
 
 def iterate_examples(config: dict[str, dict[str, int]]) -> Generator[dict[str, list[str]], None, None]:
-	assert os.path.isfile(f'{PATH}/{config['data']['hellaswag_file']}'), f'In benchmarks/hellaswag directory there is no file {config['data']['hellaswag_file']}'
-	with open(f'{PATH}/{config['data']['hellaswag_file']}', 'rb') as file:
+	assert os.path.isfile(f"{PATH}/{config['data']['hellaswag_file']}"), f"In benchmarks/hellaswag directory there is no file {config['data']['hellaswag_file']}"
+	with open(f"{PATH}/{config['data']['hellaswag_file']}", 'rb') as file:
 		for line in file:
 			example = json.loads(line)
 			yield example

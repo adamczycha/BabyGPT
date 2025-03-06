@@ -2,20 +2,20 @@ training:
   init_from: 'scratch'  # 'resume', 'gpt2', 'scratch'
   path_to_resume_training: checkpoint_0.8750.pth
   training: true
-  sample: false
-  eval: false
-  compile: true
-  batch_size: 524288  # in tokens
-  mini_batch:  32   # real batch size used to simulate bigger batches
+  sample: true
+  eval: true
+  compile: false
+  batch_size: 491520  # in tokens
+  mini_batch:  20   # real batch size used to simulate bigger batches
 
 evaluation:
   validation_every_n_steps: 100
   validation_micro_steps: 1
   sample_every_n: 50
   force_sample: true
-  samples: 3
+  samples_per_rank: 1
   length: 32 
-  hellaswag_every_n_steps: 100
+  hellaswag_every_n_steps: 1
 
 optimizer:
   warmup_steps: 10
@@ -39,6 +39,7 @@ saving:
   save_with_resume_option: true
 
 data:
-  dataset: sapkowski
+  dataset: wojny_husyckie
+  hellaswag_file: hellaswag_val_PL.jsonl 
   # chank_size is set to ddp_world_size * block_size * batchsize to work nicely with DDP (you can overwrite)
   # chank_size: your value

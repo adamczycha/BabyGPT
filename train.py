@@ -137,11 +137,11 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 
 	with (model.no_sync() if ddp else nullcontext()):
 		if train_config['sample'] and(((step % eval_config['sample_every_n'] == 0) or step == config['optimizer']['max_steps']-1)  or eval_config['force_sample']):
-			samples_per_rank = eval_config['samples'] // ddp_world_size
+			
 			tokenizer = AutoTokenizer.from_pretrained("gpt2", use_fast=True)
 			tokens = tokenizer.encode("Jestem królem dżungli! ")
 			tokens = torch.tensor(tokens, dtype=torch.long)
-			tokens = tokens.unsqueeze(0).repeat(samples_per_rank, 1)
+			tokens = tokens.unsqueeze(0).repeat(eval_config['samples_per_rank'], 1)
 			xgen = tokens.to(device)
 			sample_rng = torch.Generator(device=device)
 			sample_rng.manual_seed(42 + ddp_rank)
@@ -156,7 +156,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 					ix = torch.multinomial(topk_probs, 1, generator=sample_rng) 
 					xcol = torch.gather(topk_indices, -1, ix) 
 					xgen = torch.cat((xgen, xcol), dim=1)
-			for i in range(samples_per_rank):
+			for i in range(eval_config['samples_per_rank']):
 				tokens = xgen[i, :eval_config['length']].tolist()
 				decoded = tokenizer.decode(tokens)
 				print(f"rank {ddp_rank} sample {i}: {decoded}")
