@@ -3,7 +3,7 @@ import requests
 import os
 from tqdm import tqdm
 import json
-import tiktoken
+from transformers import AutoTokenizer
 import torch
 from transformers import AutoModelForCausalLM
 from torch.nn import functional as F
@@ -11,26 +11,11 @@ from torch.nn import functional as F
 PATH = 'benchmarks/hellaswag'
 
 
-def download_val() -> None:
-	response = requests.get('https://raw.githubusercontent.com/rowanz/hellaswag/refs/heads/master/data/hellaswag_val.jsonl', stream=True)
-	os.makedirs('benchmarks/hellaswag', exist_ok=True)
-	data_size = int(response.headers.get('content-length', 0))
-	cumulative_download = 0
-	with open(f'{PATH}/hellaswag_val.jsonl', mode='wb') as file, tqdm(
-		desc='hellaswag_val', total=data_size, unit='iB', unit_scale=True, unit_divisor=1024
-	) as bar:
-		for data in response.iter_content(chunk_size=1024):
-			size = file.write(data)
-			cumulative_download += size
-			if cumulative_download > bar.total:
-				bar.total = cumulative_download
-			bar.update(size)
 
 
-def iterate_examples() -> Generator[dict[str, list[str]], None, None]:
-	if not os.path.isfile(f'{PATH}/hellaswag_val.jsonl'):
-		download_val()
-	with open('benchmarks/hellaswag/hellaswag_val.jsonl', 'rb') as file:
+def iterate_examples(config: dict[str, dict[str, int]]) -> Generator[dict[str, list[str]], None, None]:
+	assert os.path.isfile(f'{PATH}/{config['data']['hellaswag_file']}'), f'In benchmarks/hellaswag directory there is no file {config['data']['hellaswag_file']}'
+	with open(f'{PATH}/{config['data']['hellaswag_file']}', 'rb') as file:
 		for line in file:
 			example = json.loads(line)
 			yield example
@@ -41,12 +26,12 @@ def prepare_example(example: dict[str, list[str]]) -> tuple[torch.Tensor, torch.
 	endings = example['endings']
 	label = example['label']
 
-	enc = tiktoken.get_encoding('gpt2')
-	ctx_tokens = enc.encode(ctx)
+	tokenizer = AutoTokenizer.from_pretrained("gpt2", use_fast=True)
+	ctx_tokens = tokenizer.encode(ctx)
 	tok_rows = []
 	mask_rows = []
 	for end in endings:
-		end_tokens = enc.encode(' ' + end)
+		end_tokens = tokenizer.encode(' ' + end)
 		tok_rows.append(ctx_tokens + end_tokens)
 		mask_rows.append([0] * len(ctx_tokens) + [1] * len(end_tokens))
 

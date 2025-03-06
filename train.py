@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from pathlib import Path
 from src.hellaswag import iterate_examples, calculate_sum_loss, prepare_example
 import yaml
-import tiktoken
+from transformers import AutoTokenizer
 import torch.nn.functional as F
 
 
@@ -30,8 +30,7 @@ if ddp:
 	try:
 		assert torch.cuda.is_available()
 	except AssertionError as e:
-		if master_process:
-			logger.error(f'DDP only on gpu: {e}')
+		logger.error(f'DDP only on gpu: {e}')
 	dist.init_process_group(backend='nccl')
 	ddp_rank = int(os.environ['RANK'])
 	ddp_local_rank = int(os.environ['LOCAL_RANK'])
@@ -139,8 +138,8 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 	with (model.no_sync() if ddp else nullcontext()):
 		if train_config['sample'] and(((step % eval_config['sample_every_n'] == 0) or step == config['optimizer']['max_steps']-1)  or eval_config['force_sample']):
 			samples_per_rank = eval_config['samples'] // ddp_world_size
-			enc = tiktoken.get_encoding('gpt2')
-			tokens = enc.encode("Jaskier w kompani Geralta ")
+			tokenizer = AutoTokenizer.from_pretrained("gpt2", use_fast=True)
+			tokens = tokenizer.encode("Jestem królem dżungli! ")
 			tokens = torch.tensor(tokens, dtype=torch.long)
 			tokens = tokens.unsqueeze(0).repeat(samples_per_rank, 1)
 			xgen = tokens.to(device)
@@ -159,7 +158,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 					xgen = torch.cat((xgen, xcol), dim=1)
 			for i in range(samples_per_rank):
 				tokens = xgen[i, :eval_config['length']].tolist()
-				decoded = enc.decode(tokens)
+				decoded = tokenizer.decode(tokens)
 				print(f"rank {ddp_rank} sample {i}: {decoded}")
 
 		if step % eval_config['validation_every_n_steps'] == 0:
@@ -182,7 +181,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 			model.eval()
 			num_total = 0
 			num_correct_norm = 0
-			examples = iterate_examples()
+			examples = iterate_examples(config)
 			for i, example in enumerate(examples):
 				if i % ddp_world_size == ddp_rank:
 					tokens, mask, label = prepare_example(example)
