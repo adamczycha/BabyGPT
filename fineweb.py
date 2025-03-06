@@ -15,23 +15,16 @@ tokenizer = AutoTokenizer.from_pretrained("gpt2", use_fast=True)
 
 if __name__ == '__main__':
 	
-	dataset = load_dataset('HuggingFaceFW/fineweb-2', name='pol_Latn', split='train', num_proc=num_proc, data_files = ['data/pol_Latn/train/000_00000.parquet', 'data/pol_Latn/train/000_00001.parquet', 'data/pol_Latn/train/000_00002.parquet', 'data/pol_Latn/train/000_00003.parquet', 'data/pol_Latn/train/000_00004.parquet', 'data/pol_Latn/train/000_00005.parquet']).cleanup_cache_files()
-	dataset = dataset.select_columns(['text']).cleanup_cache_files()
-	def chunk_generator(dataset, max_chars=1000):
-		for example in dataset:
-			text = example["text"]
-			for i in range(0, len(text), max_chars):
-				yield {"text": text[i:i + max_chars]}
+	dataset = load_dataset('HuggingFaceFW/fineweb-2', name='pol_Latn', split='train', num_proc=num_proc, data_files = ['data/pol_Latn/train/000_00000.parquet', 'data/pol_Latn/train/000_00001.parquet', 'data/pol_Latn/train/000_00002.parquet', 'data/pol_Latn/train/000_00003.parquet', 'data/pol_Latn/train/000_00004.parquet', 'data/pol_Latn/train/000_00005.parquet'])
+	dataset = dataset.select_columns(['text'])
+	shutil.rmtree('/root/.cache/huggingface/hub/datasets--HuggingFaceFW--fineweb-2')
 
-
-	dataset = Dataset.from_generator(chunk_generator, gen_kwargs={"dataset": dataset, "max_chars": tokenizer.max_len_single_sentence}).cleanup_cache_files()
-	split_dataset = dataset.train_test_split(test_size=0.0005, seed=0, shuffle=False, writer_batch_size=10000).cleanup_cache_files()
+	split_dataset = dataset.train_test_split(test_size=0.0005, seed=0, shuffle=False, writer_batch_size=10000)
 	split_dataset['val'] = split_dataset.pop('test')
 	del dataset
 	gc.collect()
 	
 	
-
 	def tokenize(example: dict[str, list[str]]) -> dict[str, object]:
 		batch = tokenizer(example["text"], truncation=False, add_special_tokens=False)
 		tokens = [ids + [tokenizer.eos_token_id] for ids in batch["input_ids"]]
@@ -45,7 +38,7 @@ if __name__ == '__main__':
 		batched=True,
 		desc='tokenizing data',
 		num_proc=num_proc,
-	).cleanup_cache_files()
+	)
 	del split_dataset
 	gc.collect()
 
