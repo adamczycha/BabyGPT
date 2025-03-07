@@ -5,8 +5,8 @@ training:
   sample: true
   eval: true
   compile: false
-  batch_size: 491520  # in tokens
-  mini_batch:  20   # real batch size used to simulate bigger batches
+  batch_size: 524288  # in tokens
+  mini_batch:  32   # real batch size used to simulate bigger batches
 
 evaluation:
   validation_every_n_steps: 100

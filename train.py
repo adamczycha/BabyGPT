@@ -118,7 +118,9 @@ val_loader = DataLoader(
 )
 
 if ddp:
+	print('before DDP',ddp_rank)
 	model = DDP(model, device_ids=[ddp_local_rank])
+	print('after DDP',ddp_rank)
 step_per_epoch = len(train_dataset) // batch_size
 if master_process:
 	logger.info(f' {step_per_epoch} batches in epoch')

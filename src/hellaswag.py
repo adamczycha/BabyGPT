@@ -90,8 +90,8 @@ class HellaSwag():
 		pred = sum_loss.view(-1,4).argmin(dim=1)
 		pred_norm = avg_loss.view(-1,4).argmin(dim=1)
 		self.num_total += len(pred)
-		self.correct += (pred == torch.tensor(labels)).sum().item()
-		self.correct_norm += (pred_norm == torch.tensor(labels)).sum().item()
+		self.correct += (pred == torch.tensor(labels, device = self.device)).sum().item()
+		self.correct_norm += (pred_norm == torch.tensor(labels, device = self.device)).sum().item()
 
 	def get_counts(self):
 		if self.ddp_world_size > 1:
