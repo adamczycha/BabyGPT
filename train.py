@@ -12,7 +12,7 @@ from src.sampler import ChankSampler
 from src.dataloader import custom_collate_fn
 from torch.utils.data import DataLoader
 from pathlib import Path
-from src.hellaswag import iterate_examples, calculate_sum_loss, prepare_example
+from src.hellaswag import HellaSwag
 import yaml
 from transformers import AutoTokenizer
 import torch.nn.functional as F
@@ -137,7 +137,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 
 	with (model.no_sync() if ddp else nullcontext()):
 		if train_config['sample'] and(((step % eval_config['sample_every_n'] == 0) or step == config['optimizer']['max_steps']-1)  or eval_config['force_sample']):
-			
+			model.eval()
 			tokenizer = AutoTokenizer.from_pretrained("gpt2", use_fast=True)
 			tokens = tokenizer.encode("Jestem królem dżungli! ")
 			tokens = torch.tensor(tokens, dtype=torch.long)
@@ -179,29 +179,21 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 
 		if step % eval_config['hellaswag_every_n_steps'] == 0 and train_config['eval']:
 			model.eval()
-			num_total = 0
-			num_correct_norm = 0
-			examples = iterate_examples(config)
-			for i, example in enumerate(examples):
-				if i % ddp_world_size == ddp_rank:
-					tokens, mask, label = prepare_example(example)
-					tokens, mask = tokens.to(device), mask.to(device)
-					with ctx:
-						logits, loss = model(tokens)
-					sum_loss, avg_loss = calculate_sum_loss(logits, tokens, mask)
-					pred = sum_loss.argmin().item()
-					pred_norm = avg_loss.argmin().item()
-					num_total += 1
-					num_correct_norm += int(pred_norm == label)
+			hellaswag = HellaSwag(config, ddp_rank, ddp_world_size, device)
+			for batch in hellaswag.batch_iterator():
+				tokens, mask, labels = hellaswag.prepare_batch(batch)
+				tokens, mask = tokens.to(device), mask.to(device)
+				with ctx:
+					logits, loss = model(tokens)
+				hellaswag.count_correct(logits, tokens, mask, labels)
+			num_total, correct, correct_norm = hellaswag.get_counts()
 			if ddp:
-				num_total = torch.tensor(num_total, dtype=torch.long, device=device)
-				num_correct_norm = torch.tensor(num_correct_norm, device=device)
-				dist.all_reduce(num_correct_norm, op=dist.ReduceOp.SUM)
 				dist.all_reduce(num_total, op=dist.ReduceOp.SUM)
-				num_total.item()
-				num_correct_norm.item()
+				dist.all_reduce(correct, op=dist.ReduceOp.SUM)
+				dist.all_reduce(correct_norm, op=dist.ReduceOp.SUM)
+				num_total, correct, correct_norm = num_total.item(), correct.item(), correct_norm.item()
 			if master_process:
-				logger.info(f'HellaSwag step {step}. Result = {num_correct_norm}/{num_total}={(num_correct_norm/num_total):.4f}')
+				logger.info(f'HellaSwag step {step}. Result = {correct}/{num_total}={(correct/num_total):.4f}, Result_norm = {correct_norm}/{num_total}={(correct_norm/num_total):.4f}')
 
 		if train_config['training'] is False:
 			break
