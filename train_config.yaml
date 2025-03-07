@@ -2,24 +2,24 @@ training:
   init_from: 'scratch'  # 'resume', 'gpt2', 'scratch'
   path_to_resume_training: checkpoint_0.8750.pth
   training: true
-  sample: true
+  sample: false
   eval: true
-  compile: false
-  batch_size: 524288  # in tokens
-  mini_batch:  32   # real batch size used to simulate bigger batches
+  compile: true
+  batch_size: 573440  # in tokens
+  mini_batch:  40   # real batch size used to simulate bigger batches
 
 evaluation:
-  validation_every_n_steps: 100
+  validation_every_n_steps: 200
   validation_micro_steps: 1
   sample_every_n: 50
   force_sample: true
   samples_per_rank: 1
   length: 32 
-  hellaswag_every_n_steps: 1
+  hellaswag_every_n_steps: 1000
 
 optimizer:
-  warmup_steps: 10
-  max_steps: 50
+  warmup_steps: 2000
+  max_steps: 20000 # 28B tokens 20k*0.5M => 0.37 epoch
   max_lr: 6e-4
   min_lr: 0.1  # min_lr is used as fraction min_lr = (min_lr * max_lr)
 

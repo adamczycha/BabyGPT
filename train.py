@@ -22,7 +22,9 @@ with open('train_config.yaml', 'r') as file:
 	config = yaml.safe_load(file)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-ctx = nullcontext() if device == 'cpu' else torch.autocast(device_type=device, dtype=torch.float16)
+dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16'
+ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[dtype]
+ctx = nullcontext() if device == 'cpu' else torch.autocast(device_type=device, dtype=ptdtype)
 
 
 ddp = int(os.environ.get('RANK', -1)) != -1
@@ -118,9 +120,7 @@ val_loader = DataLoader(
 )
 
 if ddp:
-	print('before DDP',ddp_rank)
 	model = DDP(model, device_ids=[ddp_local_rank])
-	print('after DDP',ddp_rank)
 step_per_epoch = len(train_dataset) // batch_size
 if master_process:
 	logger.info(f' {step_per_epoch} batches in epoch')
@@ -140,7 +140,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 	with (model.no_sync() if ddp else nullcontext()):
 		if train_config['sample'] and(((step % eval_config['sample_every_n'] == 0) or step == config['optimizer']['max_steps']-1)  or eval_config['force_sample']):
 			model.eval()
-			tokenizer = AutoTokenizer.from_pretrained("gpt2", use_fast=True)
+			tokenizer = AutoTokenizer.from_pretrained("gpt2", use_fast=True, clean_up_tokenization_spaces = False)
 			tokens = tokenizer.encode("Jestem królem dżungli! ")
 			tokens = torch.tensor(tokens, dtype=torch.long)
 			tokens = tokens.unsqueeze(0).repeat(eval_config['samples_per_rank'], 1)
@@ -188,14 +188,13 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 				with ctx:
 					logits, loss = model(tokens)
 				hellaswag.count_correct(logits, tokens, mask, labels)
-			num_total, correct, correct_norm = hellaswag.get_counts()
+			num_total, correct_norm = hellaswag.get_counts()
 			if ddp:
 				dist.all_reduce(num_total, op=dist.ReduceOp.SUM)
-				dist.all_reduce(correct, op=dist.ReduceOp.SUM)
 				dist.all_reduce(correct_norm, op=dist.ReduceOp.SUM)
 				num_total, correct, correct_norm = num_total.item(), correct.item(), correct_norm.item()
 			if master_process:
-				logger.info(f'HellaSwag step {step}. Result = {correct}/{num_total}={(correct/num_total):.4f}, Result_norm = {correct_norm}/{num_total}={(correct_norm/num_total):.4f}')
+				logger.info(f'HellaSwag step {step}. Result = {correct_norm}/{num_total}={(correct_norm/num_total):.4f}')
 
 		if train_config['training'] is False:
 			break

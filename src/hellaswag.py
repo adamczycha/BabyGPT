@@ -41,7 +41,7 @@ class HellaSwag():
 		
 		endings = [' '+end for endings in endings_list for end in endings]
 
-		tokenizer = AutoTokenizer.from_pretrained("gpt2", use_fast=True)
+		tokenizer = AutoTokenizer.from_pretrained("gpt2", use_fast=True, clean_up_tokenization_spaces = False)
 		ctx = tokenizer.batch_encode_plus(ctx)['input_ids']
 		endings = tokenizer.batch_encode_plus(endings)['input_ids']
 
@@ -87,15 +87,12 @@ class HellaSwag():
 	
 	def count_correct(self, logits: torch.Tensor, tokens: torch.Tensor, mask: torch.Tensor, labels: list[int]):
 		sum_loss, avg_loss = self.calculate_sum_loss(logits, tokens, mask)
-		pred = sum_loss.view(-1,4).argmin(dim=1)
 		pred_norm = avg_loss.view(-1,4).argmin(dim=1)
-		self.num_total += len(pred)
-		self.correct += (pred == torch.tensor(labels, device = self.device)).sum().item()
+		self.num_total += len(pred_norm)
 		self.correct_norm += (pred_norm == torch.tensor(labels, device = self.device)).sum().item()
 
 	def get_counts(self):
 		if self.ddp_world_size > 1:
 			self.num_total = torch.tensor(self.num_total, dtype=torch.long, device=self.device)
-			self.correct = torch.tensor(self.correct, dtype=torch.long, device=self.device)
 			self.correct_norm =torch.tensor(self.correct_norm, dtype=torch.long, device=self.device)
 		return self.num_total, self.correct, self.correct_norm
