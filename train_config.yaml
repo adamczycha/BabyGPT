@@ -1,21 +1,28 @@
-training:
+general: 
   init_from: 'scratch'  # 'resume', 'gpt2', 'scratch'
-  path_to_resume_training: checkpoint_0.8750.pth
-  training: true
-  sample: false
-  eval: true
+  path_to_resume_training: checkpoint_0.8750.pth # only if 'resume'
+  train: false
+  val: false
+  sampling: false
+  eval: false
+
+training:
   compile: true
   batch_size: 524288  # in tokens
   mini_batch:  32   # real batch size used to simulate bigger batches
 
-evaluation:
-  validation_every_n_steps: 300
-  validation_micro_steps: 20
-  sample_every_n: 50
-  force_sample: true
+validation:
+  val_micro_steps: 20
+  val_every_n_steps: 300 
+
+sampling:
+  force_sample: true  #force sampling at the first iteration 
   samples_per_rank: 1
-  length: 32 
-  hellaswag_every_n_steps: 300
+  sample_len: 32
+
+evaluation:
+  hellaswag: true
+  hell_every_n_steps: 300
 
 optimizer:
   warmup_steps: 1000
@@ -30,7 +37,6 @@ model:
   n_layer: 12
   n_embd: 768
   kv_group_factor: 2 # every n queries has one k, v projection
-
 
 saving:
   save_checkpoints: ture

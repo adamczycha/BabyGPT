@@ -28,7 +28,7 @@ class ChankSampler(Sampler):
 
 		if len(self.dataset) < step_size * ddp_world_size:
 			step_size = (len(self.dataset) // ddp_world_size)-1
-			tokens_used_in_val = self.config['evaluation']['validation_micro_steps'] * mini_batch * block_size 
+			tokens_used_in_val = self.config['validation']['val_micro_steps'] * mini_batch * block_size 
 			assert (
 				step_size > tokens_used_in_val
 			), f'You have to little tokens for validation. {tokens_used_in_val} is used in val you have only {step_size}.'

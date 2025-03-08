@@ -45,72 +45,7 @@ class CasualSelfAttention(nn.Module):
 		k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
 		q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
 		v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
-	# kv_cache started 
-	# 	self.config = config
-	# 	self.n_kv_heads = config.n_head // config.kv_group_factor
-	# 	self.n_rep = config.kv_group_factor
-	# 	self.head_dim = config.n_embd // config.n_head
-
-	# 	self.wq = nn.Linear(config.n_embd, config.n_embd)
-	# 	self.wk = nn.Linear(config.n_embd, self.head_dim * self.n_kv_heads)
-	# 	self.wv = nn.Linear(config.n_embd, self.head_dim * self.n_kv_heads)
-
-	# 	self.wout = nn.Linear(config.n_embd, config.n_embd)
-
-	# 	self.cache_k = None
-	# 	self.cache_v = None
-	# 	self.use_kv_cache = False
-
-	# def init_kv_cache(self, max_batch_size, max_seq_len, device):
-	# 	self.cache_k = torch.zeros(
-    #         (max_batch_size, max_seq_len, self.n_kv_heads, self.head_dim),
-    #         device=device,
-    #     )
-	# 	self.cache_v = torch.zeros(
-    #         (max_batch_size, max_seq_len, self.n_kv_heads, self.head_dim),
-    #         device=device,
-    #     )
 	
-	# def enable_kv_cache(self, mode=True):
-	# 	self.use_kv_cache = mode
-
-	# def kv_repeat(self, x: torch.Tensor, n_rep: int) -> list[torch.Tensor]:
-	# 	if n_rep == 1:
-	# 		return x
-	# 	batch_size, seq_len, kv_heads, head_dim = x.shape
-	# 	return (x[:, :, :, None, :]
-	# 	  .expand(batch_size, seq_len, kv_heads, n_rep , head_dim)
-	# 	  .reshape(batch_size, seq_len, kv_heads * n_rep, head_dim))
-
-	# def forward(self, x: torch.Tensor, start_pos: int = 0) -> torch.Tensor:
-	# 	batchsize, seqlen, dim  = x.shape
-	# 	xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
-
-	# 	xq = xq.view(batchsize, seqlen, self.config.n_head, dim // self.config.n_head)
-	# 	xk = xk.view(batchsize, seqlen, self.n_kv_heads, dim // self.n_kv_heads)
-	# 	xv = xv.view(batchsize, seqlen, self.n_kv_heads, dim // self.n_kv_heads)
-
-	# 	if self.use_kv_cache:
-	# 		self.cache_k = self.cache_k.to(xq)
-	# 		self.cache_v = self.cache_v.to(xq)
-
-	# 		self.cache_k[:batchsize, start_pos : start_pos + seqlen]
-	# 		self.cache_v[:batchsize, start_pos : start_pos + seqlen]
-
-	# 		xk = self.cache_k[:batchsize, :start_pos + seqlen]
-	# 		xv = self.cache_v[:batchsize, :start_pos + seqlen]
-
-	# 	xk, xv = self.kv_repeat(xk, self.n_rep), self.kv_repeat(xv, self.n_rep)
-
-	# 	xq = xq.transpose(1,2)
-	# 	xk = xk.transpose(1,2)
-	# 	xv = xv.transpose(1,2)
-
-		# y = F.scaled_dot_product_attention(xq, xk, xv, is_causal=True)
-
-		# y = y.transpose(1, 2).contiguous().view(batchsize, seqlen, dim)
-		# y = self.wout(y)
-		# return y
 		y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
 
 		y = y.transpose(1, 2).contiguous().view(B, T, C)
