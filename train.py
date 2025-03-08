@@ -192,7 +192,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 			if ddp:
 				dist.all_reduce(num_total, op=dist.ReduceOp.SUM)
 				dist.all_reduce(correct_norm, op=dist.ReduceOp.SUM)
-				num_total, correct, correct_norm = num_total.item(), correct.item(), correct_norm.item()
+				num_total, correct_norm = num_total.item(), correct_norm.item()
 			if master_process:
 				logger.info(f'HellaSwag step {step}. Result = {correct_norm}/{num_total}={(correct_norm/num_total):.4f}')
 
@@ -229,7 +229,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 		)
 		saving_config = config['saving']
 		# saving
-		if (saving_config['save_checkpoints'] and step % saving_config['save_every_n_batches'] == 0) or (saving_config['save_end_model'] and step == config['optimizer']['max_steps']-1):
+		if (saving_config['save_checkpoints'] and step % saving_config['save_every_n_batches'] == 0 and (step > 0)) or (saving_config['save_end_model'] and step == config['optimizer']['max_steps']-1):
 			raw_model = model.module if ddp else model
 			state = {'step': step, 'epoch': epoch, 'config': config, 'model': raw_model.state_dict(), 'loss': loss_accumulation.item()}
 			if saving_config['save_with_resume_option']:

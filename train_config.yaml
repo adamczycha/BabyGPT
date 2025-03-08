@@ -5,21 +5,21 @@ training:
   sample: false
   eval: true
   compile: true
-  batch_size: 573440  # in tokens
-  mini_batch:  40   # real batch size used to simulate bigger batches
+  batch_size: 524288  # in tokens
+  mini_batch:  32   # real batch size used to simulate bigger batches
 
 evaluation:
-  validation_every_n_steps: 200
-  validation_micro_steps: 1
+  validation_every_n_steps: 300
+  validation_micro_steps: 20
   sample_every_n: 50
   force_sample: true
   samples_per_rank: 1
   length: 32 
-  hellaswag_every_n_steps: 1000
+  hellaswag_every_n_steps: 300
 
 optimizer:
-  warmup_steps: 2000
-  max_steps: 20000 # 28B tokens 20k*0.5M => 0.37 epoch
+  warmup_steps: 1000
+  max_steps: 10000 # 28B tokens 20k*0.5M => 0.17 epoch
   max_lr: 6e-4
   min_lr: 0.1  # min_lr is used as fraction min_lr = (min_lr * max_lr)
 
@@ -33,13 +33,13 @@ model:
 
 
 saving:
-  save_checkpoints: false
-  save_every_n_batches: 250
+  save_checkpoints: ture
+  save_every_n_batches: 5000
   save_end_model: true
   save_with_resume_option: true
 
 data:
-  dataset: wojny_husyckie
+  dataset: fineweb
   hellaswag_file: hellaswag_val_PL.jsonl 
   # chank_size is set to ddp_world_size * block_size * batchsize to work nicely with DDP (you can overwrite)
   # chank_size: your value

@@ -19,7 +19,7 @@ class HellaSwag():
 		self.ddp_rank = ddp_rank
 		self.ddp_world_size = ddp_world_size
 		assert os.path.isfile(f"{PATH}/{config['data']['hellaswag_file']}"), f"In benchmarks/hellaswag directory there is no file {config['data']['hellaswag_file']}"
-		self.num_total, self.correct, self.correct_norm = 0,0,0
+		self.num_total, self.correct_norm = 0,0
 
 
 	def batch_iterator(self) -> Generator[dict[str, list[str]], None, None]:
@@ -95,4 +95,4 @@ class HellaSwag():
 		if self.ddp_world_size > 1:
 			self.num_total = torch.tensor(self.num_total, dtype=torch.long, device=self.device)
 			self.correct_norm =torch.tensor(self.correct_norm, dtype=torch.long, device=self.device)
-		return self.num_total, self.correct, self.correct_norm
+		return self.num_total, self.correct_norm
