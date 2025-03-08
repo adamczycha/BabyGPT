@@ -18,7 +18,7 @@ from transformers import AutoTokenizer
 import torch.nn.functional as F
 
 
-with open('config_training.yaml', 'r') as file:
+with open('train_config.yaml', 'r') as file:
 	config = yaml.safe_load(file)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -63,7 +63,7 @@ if config['general']['init_from'] == 'resume':
 	model = GPT(config)
 	model.load_state_dict(checkpoint['model'])
 	model.to(device)
-	if config['general']['training']:
+	if config['general']['train']:
 		optimizer = model.configure_optimizer(weight_decay=0.1, learning_rate=0, device=device)
 		optimizer.load_state_dict(checkpoint['optimizer'])
 		scheduler = CosineScheduler(optimizer, config)
@@ -90,7 +90,7 @@ batch_size = config['training']['batch_size']
 mini_batch = config['training']['mini_batch']
 block_size = config['model']['block_size']
 
-if config['general']['training']:
+if config['general']['train']:
 	try:
 		assert batch_size % (mini_batch * block_size * ddp_world_size) == 0
 	except AssertionError:
@@ -101,10 +101,10 @@ if config['general']['training']:
 		logger.info(f'total desiered batch size {batch_size}')
 		logger.info(f'=> calculated in gradient accumation steps: {grad_accum_steps}')
 
-if torch.cuda.is_available() and config['training']['compile']:
+if torch.cuda.is_available() and config['training']['compile'] and config['general']['train']:
 	model.compile()
 
-if config['general']['training']:
+if config['general']['train']:
 	train_dataset = TokenDataset(config=config, split='train')
 	sampler = ChankSampler(config=config, dataset=train_dataset, shuffle=True, seed=0)
 	train_loader = DataLoader(
@@ -126,12 +126,12 @@ if ddp:
 
 
 
-epoch = -1 if ('checkpoint' not in locals())  or not config['general']['training'] else checkpoint['epoch']
-last_step = 0 if ('checkpoint' not in locals())  or not config['general']['training'] else checkpoint['step'] + 1
+epoch = -1 if ('checkpoint' not in locals())  or not config['general']['train'] else checkpoint['epoch']
+last_step = 0 if ('checkpoint' not in locals())  or not config['general']['train'] else checkpoint['step'] + 1
 scaler = torch.amp.GradScaler(enabled=(device == 'cuda'))
 
 for step in range(last_step, int(config['optimizer']['max_steps'])):
-	if config['general']['training'] and (step % (step_per_epoch - 1) == 0 or resume_run):
+	if config['general']['train'] and (step % (step_per_epoch - 1) == 0 or resume_run):
 		epoch += 1
 		sampler.set_epoch(epoch)
 		train_iter = iter(train_loader)
@@ -141,7 +141,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 		if config['general']['sample'] and (((step % config['sampling']['sample_every_n'] == 0) or step == config['optimizer']['max_steps']-1)  or config['sampling']['force_sample']):
 			model.eval()
 			tokenizer = AutoTokenizer.from_pretrained("gpt2", use_fast=True, clean_up_tokenization_spaces = False)
-			tokens = tokenizer.encode("Jestem królem dżungli! ")
+			tokens = tokenizer.encode(config['sampling']['starting_sequence'])
 			tokens = torch.tensor(tokens, dtype=torch.long)
 			tokens = tokens.unsqueeze(0).repeat(config['sampling']['samples_per_rank'], 1)
 			xgen = tokens.to(device)
@@ -161,7 +161,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 			for i in range(config['sampling']['samples_per_rank']):
 				tokens = xgen[i, :config['sampling']['sample_len']].tolist()
 				decoded = tokenizer.decode(tokens)
-				print(f"rank {ddp_rank} sample {i}: {decoded}")
+				logger.info(f"rank {ddp_rank} sample {i}: {decoded}")
 
 		if config['general']['val'] and (step % config['validation']['val_every_n_steps'] == 0):
 			model.eval()
@@ -196,7 +196,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 			if master_process:
 				logger.info(f'{step} HellaSwag Result = {correct_norm}/{num_total}={(correct_norm/num_total):.4f}')
 
-		if config['general']['training'] is False:
+		if config['general']['train'] is False:
 			break
 		loss_accumulation = 0.0
 		t0 = time()
@@ -236,7 +236,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 				state['scheduler'] = scheduler.state_dict()
 			torch.save(state, f'checkpoint_{step/grad_accum_steps/step_per_epoch:.4f}.pth')
 			logger.info(
-				f'Checkpoint saved. On {step/grad_accum_steps/step_per_epoch:.4f} epoch. Resumeable save: { str(config['saving']["save_with_resume_option"])}'
+				f'Checkpoint saved. On {step/grad_accum_steps/step_per_epoch:.4f} epoch. Resumeable save: { str(config["saving"]["save_with_resume_option"])}'
 			)
 
 
