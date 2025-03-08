@@ -3,7 +3,7 @@ general:
   path_to_resume_training: checkpoint_0.8750.pth # only if 'resume'
   train: false
   val: false
-  sampling: false
+  sample: false
   eval: false
 
 training:
