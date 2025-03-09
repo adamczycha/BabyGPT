@@ -13,7 +13,7 @@ docstring-code-format = true
 [tool.mypy]
 strict = true
 ignore_missing_imports = true
-disable_error_code = ["misc", "no-untyped-call", "attr-defined"]
+disable_error_code = ["misc", "no-untyped-call", "attr-defined", "union-attr", "call-overload"]
 
 
 

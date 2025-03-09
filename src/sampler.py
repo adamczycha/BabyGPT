@@ -27,11 +27,11 @@ class ChankSampler(Sampler):
 		block_size = self.config['model']['block_size']
 
 		if len(self.dataset) < step_size * ddp_world_size:
-			step_size = len(self.dataset) // ddp_world_size
-			tokens_used_in_val = self.config['evaluation']['validation_micro_steps'] * mini_batch * block_size
+			step_size = (len(self.dataset) // ddp_world_size) - 1
+			tokens_used_in_val = self.config['validation']['val_micro_steps'] * mini_batch * block_size
 			assert (
 				step_size > tokens_used_in_val
-			), f'You have to little tokens for validation. {tokens_used_in_val} is used in val on 1 GPU you have only {step_size}.'
+			), f'You have to little tokens for validation. {tokens_used_in_val} is used in val you have only {step_size}.'
 		document_indices = self.locate_document_EOF_to_create_chank(step_size=step_size, search_range=20000)
 
 		if self.shuffle:
@@ -42,9 +42,9 @@ class ChankSampler(Sampler):
 		document_indices = self.drop_last_in_every_document_stream(document_indices, ddp_world_size, mini_batch, block_size)
 
 		ddp_rank = int(os.environ.get('RANK', 0))
-		for chank_start, chank_end in document_indices[ddp_rank::ddp_world_size]:
-			for idx in range(chank_start, chank_end):
-				yield idx
+		selected_indices = document_indices[ddp_rank::ddp_world_size] if self.split == 'train' else document_indices
+		for chank_start, chank_end in selected_indices:
+			yield from range(chank_start, chank_end)
 
 	def set_epoch(self, epoch: int) -> None:
 		self.epoch = epoch
@@ -55,26 +55,35 @@ class ChankSampler(Sampler):
 		while cursor < len(self.dataset):
 			# Search for EOF token in a fixed range around the cursor\
 			EOF_list: list[int] = []
+			timer = 3
 			while EOF_list == []:
 				search_start = cursor
 				search_end = min(cursor + search_range, len(self.dataset))
-				EOF_list = np.where(self.dataset.tokens[search_start:search_end] == 50256)[0]
+				EOF_list = list(np.where(self.dataset.tokens[search_start:search_end] == 50256)[0])
 
-				if EOF_list.size == 0:
+				if (len(EOF_list) == 0) and (timer > 0):
 					search_start += search_range
 					search_end += search_range
+
+					timer -= 1
+				elif timer == 0:
+					document_boundry.extend([cursor])  # if for same reason creator would forget that model needs EOF tokens...
+					break
 				else:
 					EOF_index = search_start + EOF_list[0]
-					document_boundry.append(EOF_index)
+					document_boundry.extend([EOF_index])
+
 					break
+
+			if len(self.dataset) - cursor < (document_boundry[0]) * 0.8:
+				break
 			cursor += step_size
 
-		# Add the start and end boundaries
+		# Add the start  boundaries
 		document_boundry.insert(0, 0)
-		document_boundry.append(len(self.dataset))
+		document_indices = [(document_boundry[i], document_boundry[i + 1]) for i in range(len(document_boundry) - 1)]
 
-		# Create document indices
-		return [(document_boundry[i], document_boundry[i + 1]) for i in range(len(document_boundry) - 1)]
+		return document_indices
 
 	def drop_last_in_every_document_stream(
 		self, document_indices: list[tuple[int, int]], ddp_world_size: int, mini_batch: int, block_size: int
@@ -93,16 +102,16 @@ class ChankSampler(Sampler):
 			drop_tokens = 0
 			for idx in indices[::-1]:
 				drop_tokens += doc_length(document_indices[idx])
+
 				if length_data_per_rank[rank] - drop_tokens <= max_token_length:
 					start, end = document_indices[idx]
-					lacking_tokens = max_token_length - (length_data_per_rank[rank] - drop_tokens)
+					new_steam_length = length_data_per_rank[rank] - drop_tokens
+					lacking_tokens = max_token_length - new_steam_length
 					end = start + lacking_tokens
 					document_indices[idx] = (start, end)
 					break
 				else:
 					index_remove.append(idx)
-
 		for idx in sorted(index_remove, reverse=True):
 			del document_indices[idx]
-
 		return document_indices

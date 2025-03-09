@@ -3,11 +3,13 @@ from datetime import datetime
 import sys
 import types
 from typing import Type
+import os
 
 logger = logging.getLogger(__name__)
 
+os.makedirs('logs', exist_ok=True)
 stream_handle = logging.StreamHandler()
-file_handle = logging.FileHandler(filename=f"logs/{datetime.today().strftime('%Y-%m-%d_%H:%M:%S')}_gpt_run.log")
+file_handle = logging.FileHandler(filename=f"logs/{datetime.today().strftime('%Y-%m-%d_%H:%M:%S')}_gpt_run.log", mode='w+')
 
 stream_handle.setLevel(logging.INFO)
 file_handle.setLevel(logging.INFO)
