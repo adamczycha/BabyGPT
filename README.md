@@ -1,7 +1,7 @@
 
 # BabyGPT
 
-BabyGPT is a GPT-2 (127M parameter) model built on the foundations of NanoGPT by Andrej Karpathy. This project adapts the original NanoGPT approach for Polish language data and introduces several custom improvements to the data handling and training process.
+BabyGPT is a GPT-2 (127M parameter) model built on the foundations of [nanoGPT](https://github.com/karpathy/nanoGPT) by Andrej Karpathy. This project adapts the original NanoGPT approach for Polish language data and introduces several custom data handling and training improvements.
 
 ---
 
@@ -10,13 +10,23 @@ BabyGPT is a GPT-2 (127M parameter) model built on the foundations of NanoGPT by
 - **Model Architecture:**  
   Based on GPT-2 (127M).  
 - **Training Data:**  
-  Trained on a Polish subset of the fineweb2 dataset, with evaluations performed on a version of HellaSwag translated by openGPT-X.
+  Trained on a Polish subset of the fineweb2 dataset, with evaluations performed on a version of [HellaSwag](https://arxiv.org/abs/2410.08928) translated by openGPT-X.
 - **Training Hardware:**  
   Training was carried out on 8× A40 GPUs over a period of 5 hours.
 - **Observations:**  
   The exceptionally low training and validation loss might be partly due to the tokenization strategy not being fully optimized for the Polish language. In hindsight, a multilingual tokenizer might have offered better compression and performance. Additionally, using A40 GPUs was chosen for cost reasons, although A100 or H100 cards could have achieved similar or better results in less time and probably lower cost :*)...
 
 ![Training run plots](https://github.com/user-attachments/assets/2d227e5c-dd4d-43a1-bf3d-8e42935216a5)
+
+A bit of nonsensical sampling :*D:
+```text
+2025-03-08 20:00:59,129 - src.logger - INFO - rank 0 sample 0: Jestem człowiekiem który ich nie znajduje dla siebie;] - jak czujecie się w niebie? Co czujecie, jeśli to czujecie się w n
+2025-03-08 20:00:59,130 - src.logger - INFO - rank 0 sample 1: Jestem człowiekiem który ingeruje w siebie:) Wracam zawsze do klasy, dzieląc się zaufaniem i najlepszymi duchem na zawsze od
+2025-03-08 20:00:59,131 - src.logger - INFO - rank 0 sample 2: Jestem człowiekiem który ingeruje w ich istotę. Pracuję nad tym, by rozwijać swoją przyszłość. Oczywiście
+2025-03-08 20:00:59,131 - src.logger - INFO - rank 0 sample 3: Jestem człowiekiem który ich dotyka, wszystko jest, bo kochana zna, przejrzysta i przy każdej głupiej osobie szanującej.
+2025-03-08 20:00:59,132 - src.logger - INFO - rank 0 sample 4: Jestem człowiekiem który ich otoczył? Dla mnie może, ale to wszystko ma sens nie pozwolić sobie niczego w życiu prywatnym, bo
+```
+
 
 I assume that the difference between my loss and one Karpathy and OpenAI recorded is the tokenization of Polish words. Unknowingly, I transformed the task from predicting words or meaningful tokens into predicting shorter, non-meaningful syllables of Polish words. This resulted in poor understanding and a loss of coherence in the model.
 
@@ -115,7 +125,6 @@ The `train_config.py` file also allows you to modify key parameters:
 
 Special thanks to:
 - **Andrej Karpathy** – for NanoGPT, which laid the groundwork for this project.
-- **KellerJordan** – for contributions through modded-nanogpt, advancing efficient training methods.
-- 
+- **KellerJordan** – for contributions through [modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt), advancing efficient training methods.
 
 
