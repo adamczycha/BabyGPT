@@ -7,7 +7,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-os.makedirs("logs", exist_ok=True)
+os.makedirs('logs', exist_ok=True)
 stream_handle = logging.StreamHandler()
 file_handle = logging.FileHandler(filename=f"logs/{datetime.today().strftime('%Y-%m-%d_%H:%M:%S')}_gpt_run.log", mode='w+')
 

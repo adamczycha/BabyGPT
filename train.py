@@ -95,7 +95,9 @@ if config['general']['train']:
 		assert batch_size % (mini_batch * block_size * ddp_world_size) == 0
 	except AssertionError:
 		if master_process:
-			logger.critical(f'BATCH_SIZE is not divisible by mini_batch * block_size * world_size. Batch_size => ({mini_batch * block_size * ddp_world_size})')
+			logger.critical(
+				f'BATCH_SIZE is not divisible by mini_batch * block_size * world_size. Batch_size => ({mini_batch * block_size * ddp_world_size})'
+			)
 	grad_accum_steps = batch_size // (mini_batch * block_size * ddp_world_size)
 	if master_process:
 		logger.info(f'total desiered batch size {batch_size}')
@@ -120,14 +122,13 @@ if config['general']['val']:
 	val_loader = DataLoader(
 		dataset=val_dataset, batch_size=(mini_batch * block_size), sampler=val_sampler, collate_fn=custom_collate_fn, pin_memory=True
 	)
-	
+
 if ddp:
 	model = DDP(model, device_ids=[ddp_local_rank])
 
 
-
-epoch = -1 if ('checkpoint' not in locals())  or not config['general']['train'] else checkpoint['epoch']
-last_step = 0 if ('checkpoint' not in locals())  or not config['general']['train'] else checkpoint['step'] + 1
+epoch = -1 if ('checkpoint' not in locals()) or not config['general']['train'] else checkpoint['epoch']
+last_step = 0 if ('checkpoint' not in locals()) or not config['general']['train'] else checkpoint['step'] + 1
 scaler = torch.amp.GradScaler(enabled=(device == 'cuda'))
 
 for step in range(last_step, int(config['optimizer']['max_steps'])):
@@ -137,10 +138,13 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 		train_iter = iter(train_loader)
 		resume_run = False
 
-	with (model.no_sync() if ddp else nullcontext()):
-		if config['general']['sample'] and (((step % config['sampling']['sample_every_n'] == 0) or step == config['optimizer']['max_steps']-1)  or config['sampling']['force_sample']):
+	with model.no_sync() if ddp else nullcontext():
+		if config['general']['sample'] and (
+			((step % config['sampling']['sample_every_n'] == 0) or step == config['optimizer']['max_steps'] - 1)
+			or config['sampling']['force_sample']
+		):
 			model.eval()
-			tokenizer = AutoTokenizer.from_pretrained("gpt2", use_fast=True, clean_up_tokenization_spaces = False)
+			tokenizer = AutoTokenizer.from_pretrained('gpt2', use_fast=True, clean_up_tokenization_spaces=False)
 			tokens = tokenizer.encode(config['sampling']['starting_sequence'])
 			tokens = torch.tensor(tokens, dtype=torch.long)
 			tokens = tokens.unsqueeze(0).repeat(config['sampling']['samples_per_rank'], 1)
@@ -152,16 +156,16 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 				with torch.no_grad():
 					with ctx:
 						logits, loss = model(xgen)
-					logits = logits[:, -1, :] 
+					logits = logits[:, -1, :]
 					probs = F.softmax(logits, dim=-1)
 					topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
-					ix = torch.multinomial(topk_probs, 1, generator=sample_rng) 
-					xcol = torch.gather(topk_indices, -1, ix) 
+					ix = torch.multinomial(topk_probs, 1, generator=sample_rng)
+					xcol = torch.gather(topk_indices, -1, ix)
 					xgen = torch.cat((xgen, xcol), dim=1)
 			for i in range(config['sampling']['samples_per_rank']):
-				tokens = xgen[i, :config['sampling']['sample_len']].tolist()
+				tokens = xgen[i, : config['sampling']['sample_len']].tolist()
 				decoded = tokenizer.decode(tokens)
-				logger.info(f"rank {ddp_rank} sample {i}: {decoded}")
+				logger.info(f'rank {ddp_rank} sample {i}: {decoded}')
 
 		if config['general']['val'] and (step % config['validation']['val_every_n_steps'] == 0):
 			model.eval()
@@ -179,7 +183,7 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 			if master_process:
 				logger.info(f'{step} validation loss: {val_loss.item():.4f} ')
 
-		if  config['general']['eval'] and config['evaluation']['hellaswag'] and (step % config['evaluation']['hell_every_n_steps'] == 0) :
+		if config['general']['eval'] and config['evaluation']['hellaswag'] and (step % config['evaluation']['hell_every_n_steps'] == 0):
 			model.eval()
 			hellaswag = HellaSwag(config, ddp_rank, ddp_world_size, device)
 			for batch in hellaswag.batch_iterator():
@@ -228,7 +232,9 @@ for step in range(last_step, int(config['optimizer']['max_steps'])):
 			f'{step} loss: {loss_accumulation.item()} | iter time: {(time() - t0) * 1000:.2f} ms | lr: {scheduler.get_lr()[0]:.4f} | {tokens_per_sec:.2f} tokens/sec'
 		)
 		# saving
-		if (config['saving']['save_checkpoints'] and step % config['saving']['save_every_n_batches'] == 0 and (step > 0)) or (config['saving']['save_end_model'] and step == config['optimizer']['max_steps']-1):
+		if (config['saving']['save_checkpoints'] and step % config['saving']['save_every_n_batches'] == 0 and (step > 0)) or (
+			config['saving']['save_end_model'] and step == config['optimizer']['max_steps'] - 1
+		):
 			raw_model = model.module if ddp else model
 			state = {'step': step, 'epoch': epoch, 'config': config, 'model': raw_model.state_dict(), 'loss': loss_accumulation.item()}
 			if config['saving']['save_with_resume_option']:

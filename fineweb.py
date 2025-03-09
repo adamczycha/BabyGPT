@@ -2,8 +2,7 @@ import os
 import shutil
 from tqdm import tqdm
 import numpy as np
-import tiktoken
-from datasets import load_dataset, Dataset, DatasetDict
+from datasets import load_dataset
 import psutil
 import gc
 from transformers import AutoTokenizer
@@ -11,11 +10,23 @@ from transformers import AutoTokenizer
 # number of workers in .map() call
 # good number to use is ~order number o cpu cores // 2
 num_proc = psutil.cpu_count(logical=False)
-tokenizer = AutoTokenizer.from_pretrained("gpt2", use_fast=True)
+tokenizer = AutoTokenizer.from_pretrained('gpt2', use_fast=True)
 
 if __name__ == '__main__':
-	
-	dataset = load_dataset('HuggingFaceFW/fineweb-2', name='pol_Latn', split='train', num_proc=num_proc, data_files = ['data/pol_Latn/train/000_00000.parquet', 'data/pol_Latn/train/000_00001.parquet', 'data/pol_Latn/train/000_00002.parquet', 'data/pol_Latn/train/000_00003.parquet', 'data/pol_Latn/train/000_00004.parquet', 'data/pol_Latn/train/000_00005.parquet'])
+	dataset = load_dataset(
+		'HuggingFaceFW/fineweb-2',
+		name='pol_Latn',
+		split='train',
+		num_proc=num_proc,
+		data_files=[
+			'data/pol_Latn/train/000_00000.parquet',
+			'data/pol_Latn/train/000_00001.parquet',
+			'data/pol_Latn/train/000_00002.parquet',
+			'data/pol_Latn/train/000_00003.parquet',
+			'data/pol_Latn/train/000_00004.parquet',
+			'data/pol_Latn/train/000_00005.parquet',
+		],
+	)
 	dataset = dataset.select_columns(['text'])
 	shutil.rmtree('/root/.cache/huggingface/hub/datasets--HuggingFaceFW--fineweb-2')
 
@@ -23,11 +34,10 @@ if __name__ == '__main__':
 	split_dataset['val'] = split_dataset.pop('test')
 	del dataset
 	gc.collect()
-	
-	
-	def tokenize(example: dict[str, list[str]]) -> dict[str, object]:
-		batch = tokenizer(example["text"], truncation=False, add_special_tokens=False)
-		tokens = [ids + [tokenizer.eos_token_id] for ids in batch["input_ids"]]
+
+	def tokenize(example: dict[str, list[str]]) -> dict[str, list[int]]:
+		batch = tokenizer(example['text'], truncation=False, add_special_tokens=False)
+		tokens = [ids + [tokenizer.eos_token_id] for ids in batch['input_ids']]
 		lengths = [len(i) for i in tokens]
 		out = {'ids': tokens, 'len': lengths}
 		return out

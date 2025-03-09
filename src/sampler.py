@@ -27,8 +27,8 @@ class ChankSampler(Sampler):
 		block_size = self.config['model']['block_size']
 
 		if len(self.dataset) < step_size * ddp_world_size:
-			step_size = (len(self.dataset) // ddp_world_size)-1
-			tokens_used_in_val = self.config['validation']['val_micro_steps'] * mini_batch * block_size 
+			step_size = (len(self.dataset) // ddp_world_size) - 1
+			tokens_used_in_val = self.config['validation']['val_micro_steps'] * mini_batch * block_size
 			assert (
 				step_size > tokens_used_in_val
 			), f'You have to little tokens for validation. {tokens_used_in_val} is used in val you have only {step_size}.'
@@ -42,10 +42,9 @@ class ChankSampler(Sampler):
 		document_indices = self.drop_last_in_every_document_stream(document_indices, ddp_world_size, mini_batch, block_size)
 
 		ddp_rank = int(os.environ.get('RANK', 0))
-		selected_indices = (document_indices[ddp_rank::ddp_world_size] if self.split == 'train' else document_indices)
+		selected_indices = document_indices[ddp_rank::ddp_world_size] if self.split == 'train' else document_indices
 		for chank_start, chank_end in selected_indices:
 			yield from range(chank_start, chank_end)
-
 
 	def set_epoch(self, epoch: int) -> None:
 		self.epoch = epoch
@@ -61,27 +60,24 @@ class ChankSampler(Sampler):
 				search_start = cursor
 				search_end = min(cursor + search_range, len(self.dataset))
 				EOF_list = list(np.where(self.dataset.tokens[search_start:search_end] == 50256)[0])
-				
+
 				if (len(EOF_list) == 0) and (timer > 0):
 					search_start += search_range
 					search_end += search_range
-					
+
 					timer -= 1
-				elif timer == 0: 
-					document_boundry.extend([cursor]) # if for same reason creator would forget that model needs EOF tokens...
+				elif timer == 0:
+					document_boundry.extend([cursor])  # if for same reason creator would forget that model needs EOF tokens...
 					break
 				else:
 					EOF_index = search_start + EOF_list[0]
 					document_boundry.extend([EOF_index])
-					
+
 					break
-			
-			if len(self.dataset) - cursor < (document_boundry[0])*0.8:
+
+			if len(self.dataset) - cursor < (document_boundry[0]) * 0.8:
 				break
 			cursor += step_size
-			
-
-
 
 		# Add the start  boundaries
 		document_boundry.insert(0, 0)
@@ -105,12 +101,11 @@ class ChankSampler(Sampler):
 			indices = list(range(rank, len(document_indices), ddp_world_size))
 			drop_tokens = 0
 			for idx in indices[::-1]:
-
 				drop_tokens += doc_length(document_indices[idx])
 
 				if length_data_per_rank[rank] - drop_tokens <= max_token_length:
 					start, end = document_indices[idx]
-					new_steam_length = (length_data_per_rank[rank] - drop_tokens)
+					new_steam_length = length_data_per_rank[rank] - drop_tokens
 					lacking_tokens = max_token_length - new_steam_length
 					end = start + lacking_tokens
 					document_indices[idx] = (start, end)
