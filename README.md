@@ -18,7 +18,16 @@ BabyGPT is a GPT-2 (127M parameter) model built on the foundations of NanoGPT by
 
 ![Training run plots](https://github.com/user-attachments/assets/2d227e5c-dd4d-43a1-bf3d-8e42935216a5)
 
+I assume that the difference between my loss and one Karpathy and OpenAI recorded is the tokenization of Polish words. Unknowingly, I transformed the task from predicting words or meaningful tokens into predicting shorter, non-meaningful syllables of Polish words. This resulted in poor understanding and a loss of coherence in the model.
 
+```python
+
+tokenizer.tokenize('przyjaciół')
+['pr', 'zy', 'jac', 'i', 'Ã³', 'ÅĤ']
+
+tokenizer.tokenize('friends')
+['friends']
+```
 
 ## Key Modifications Compared to NanoGPT
 
